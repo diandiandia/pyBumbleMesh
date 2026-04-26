@@ -1,0 +1,4 @@
+.venv
+.git
+bluez-5.86
+__pycache__
