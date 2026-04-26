@@ -1,10 +1,54 @@
 from typing import Tuple
 import logging
-from bumble.crypto import aes_cmac
+from bumble.crypto import aes_cmac as bumble_aes_cmac
 from cryptography.hazmat.primitives.ciphers.aead import AESCCM
 
 logger = logging.getLogger(__name__)
 ZERO = b'\x00' * 16
+
+def aes_cmac(key: bytes, msg: bytes) -> bytes:
+    """
+    Wrapper for Bumble's aes_cmac to ensure standard (key, msg) order.
+    Bumble's version is actually aes_cmac(message, key).
+    """
+    if len(key) != 16:
+        # In Mesh, if key is longer (e.g. ECDH secret), we use it as message 
+        # or follow specific derivation. But aes_cmac MUST have 16-byte key.
+        raise ValueError(f"AES-CMAC requires 16-byte key, got {len(key)}")
+    return bumble_aes_cmac(msg, key)
+
+def s1(m: bytes) -> bytes:
+    """Salt generation function s1. salt = AES-CMAC(ZERO, M)"""
+    return aes_cmac(ZERO, m)
+
+def k1(n: bytes, salt: bytes, p: bytes) -> bytes:
+    """
+    Key derivation function k1.
+    k1(N, salt, P) = AES-CMAC(T, P) where T = AES-CMAC(salt, N)
+    """
+    # N (shared secret) can be 32 bytes, but 'salt' (from s1) is always 16 bytes.
+    t = aes_cmac(salt, n)
+    return aes_cmac(t, p)
+
+def k2(n: bytes, p: bytes) -> Tuple[int, bytes, bytes]:
+    """
+    Key derivation function k2.
+    k2(N, P) = (NID, EncryptionKey, PrivacyKey)
+    """
+    salt = s1(b'smk2')
+    t = aes_cmac(salt, n)
+    
+    t1 = aes_cmac(t, p + b'\x01')
+    t2 = aes_cmac(t, t1 + p + b'\x02')
+    t3 = aes_cmac(t, t2 + p + b'\x03')
+    
+    return t1[15] & 0x7F, t2, t3
+
+def aes_ccm_encrypt(key, nonce, plaintext, aad, mic_len):
+    return AESCCM(key, tag_length=mic_len).encrypt(nonce, plaintext, aad)
+
+def aes_ccm_decrypt(key, nonce, ciphertext, aad, mic_len):
+    return AESCCM(key, tag_length=mic_len).decrypt(nonce, ciphertext, aad)
 
 # BlueZ 5.86 mesh/crypto.c CRC Table
 CRC_TABLE = [
@@ -31,30 +75,3 @@ def crc8(data: bytes) -> int:
     for byte in data:
         fcs = CRC_TABLE[fcs ^ byte]
     return (0xFF - fcs) & 0xFF
-
-def s1(m: bytes) -> bytes:
-    # salt = AES-CMAC(ZERO, M) -> ZERO is key
-    return aes_cmac(ZERO, m)
-
-def k1(n: bytes, salt: bytes, p: bytes) -> bytes:
-    # k1(N, salt, P) = AES-CMAC(T, P) where T = AES-CMAC(salt, N)
-    t = aes_cmac(salt, n)
-    return aes_cmac(t, p)
-
-def k2(n: bytes, p: bytes) -> Tuple[int, bytes, bytes]:
-    # k2(N, P) = (NID, EncryptionKey, PrivacyKey)
-    # salt = s1("smk2")
-    salt = s1(b'smk2')
-    t = aes_cmac(salt, n)
-    
-    t1 = aes_cmac(t, p + b'\x01')
-    t2 = aes_cmac(t, t1 + p + b'\x02')
-    t3 = aes_cmac(t, t2 + p + b'\x03')
-    
-    return t1[15] & 0x7F, t2, t3
-
-def aes_ccm_encrypt(key, nonce, plaintext, aad, mic_len):
-    return AESCCM(key, tag_length=mic_len).encrypt(nonce, plaintext, aad)
-
-def aes_ccm_decrypt(key, nonce, ciphertext, aad, mic_len):
-    return AESCCM(key, tag_length=mic_len).decrypt(nonce, ciphertext, aad)
