@@ -28,7 +28,7 @@ class PBAdvLink:
         self.tx_lock = asyncio.Lock()
 
     async def open(self, device_uuid: bytes, timeout: float = 10.0):
-        # Open Req: [ID(4)] [Num(00)] [Opcode(03)] [UUID(16)] = 22 bytes
+        # Open Req: [ID(4)] [Num(00)] [Opcode(03)] [UUID(16)]
         pdu = self.link_id.to_bytes(4, 'big') + b'\x00\x03' + device_uuid
         self.link_ack_received.clear()
         start_time = time.time()
@@ -46,26 +46,26 @@ class PBAdvLink:
         link_id = int.from_bytes(pdu[0:4], 'big')
         if link_id != self.link_id: return
         
-        # In PB-ADV, index 5 is always Opcode/GPC
-        gpc_byte = pdu[5]
+        gpc_byte = pdu[5] if len(pdu) >= 6 else pdu[4]
         if (gpc_byte & 0x03) == 0x03:
             if gpc_byte == 0x07: self.link_ack_received.set()
             elif gpc_byte == 0x0B: self.is_opened = False
             return
 
         trans_num = pdu[4]
-        if (gpc_byte & 0x03) == 0x01: # ACK
+        if (pdu[5] & 0x03) == 0x01: # ACK
             if trans_num == self.current_ack_id: self.trans_ack_received.set()
-        elif (gpc_byte & 0x03) == 0x00: # START
+        elif (pdu[5] & 0x03) == 0x00: # START
+            seg_n = pdu[5] >> 2
             total_len = int.from_bytes(pdu[6:8], 'big')
             fcs = pdu[8]
             self.rx_buffer[trans_num] = {0: pdu[9:]}
-            self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': gpc_byte >> 2, 'fcs': fcs}
+            self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
             self._check_and_reassemble(trans_num)
             self._send_trans_ack(trans_num)
-        elif (gpc_byte & 0x03) == 0x02: # CONT
+        elif (pdu[5] & 0x03) == 0x02: # CONT
             if trans_num in self.rx_buffer:
-                self.rx_buffer[trans_num][gpc_byte >> 2] = pdu[6:]
+                self.rx_buffer[trans_num][pdu[5] >> 2] = pdu[6:]
                 self._check_and_reassemble(trans_num)
 
     def _check_and_reassemble(self, trans_id: int):
@@ -84,26 +84,33 @@ class PBAdvLink:
             fcs = crc8(pdu)
             size = len(pdu)
             
-            # --- BLUEZ 5.86 EXACT ALIGNMENT ---
-            # Start: [ID(4)] [Num(1)] [GPC(1)] [Size(2)] [FCS(1)] [Payload]
-            # Max Start Payload = 24 (BlueZ MTU) - 9 (Header) = 15 octets.
-            # Max Cont Payload = 24 (BlueZ MTU) - 6 (Header) = 18 octets.
-            first_seg_len = 15
-            cont_seg_len = 18
+            # --- EXACT BLUEZ 5.86 LOGIC (MATCHING PB_ADV_MTU 24) ---
+            # BlueZ reassembly offset is hardcoded: offset = 20 + (seg_idx-1)*23
+            # This means Start PDU MUST contain 20 bytes of data (including header bits)
+            # Or more accurately, the 'sar' buffer offset logic:
+            # Start Segment Data = PB_ADV_MTU(24) - 4 (Num, GPC, Size, FCS) = 20 octets
+            # Continuation Segment Data = PB_ADV_MTU(24) - 1 (GPC) = 23 octets
             
-            max_seg = math.ceil((size - first_seg_len) / cont_seg_len) if size > first_seg_len else 0
-            
+            if size > 20:
+                max_seg = 1 + ((size - 20 - 1) // 23)
+                init_size = 20
+            else:
+                max_seg = 0
+                init_size = size
+
             segments = []
-            # 1. Start
+            # 1. Start: [ID(4)] [Num(1)] [GPC(max_seg<<2)] [Size(2)] [FCS(1)] [Data(20)]
             header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + \
                      size.to_bytes(2, 'big') + bytes([fcs])
-            segments.append(header + pdu[:first_seg_len])
+            segments.append(header + pdu[:init_size])
             
-            # 2. Cont
+            # 2. Cont: [ID(4)] [Num(1)] [GPC(i<<2 | 02)] [Data(23)]
+            consumed = init_size
             for i in range(1, max_seg + 1):
+                seg_size = min(23, size - consumed)
                 header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02])
-                start = first_seg_len + (i-1) * cont_seg_len
-                segments.append(header + pdu[start : start + cont_seg_len])
+                segments.append(header + pdu[consumed : consumed + seg_size])
+                consumed += seg_size
 
             self.current_ack_id = self.local_trans_num
             self.trans_ack_received.clear()

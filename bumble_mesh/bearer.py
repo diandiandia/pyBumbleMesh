@@ -53,7 +53,6 @@ class AdvBearer:
             length = data[i]
             if length == 0: break
             if i + length + 1 > len(data): break
-            
             ad_type = data[i+1]
             payload = data[i+2 : i+1+length]
             
@@ -77,7 +76,7 @@ class AdvBearer:
 
     async def send_pdu(self, pdu: bytes, is_pb_adv: bool = True):
         async with self.tx_lock:
-            # NO FLAGS - ONLY MESH AD STRUCTURE (Perfectly matches BlueZ logs)
+            # NO FLAGS - ONLY MESH AD STRUCTURE (Required for 24-byte MTU alignment)
             ad_type = 0x29 if is_pb_adv else 0x2A
             ad_data = bytes([len(pdu) + 1, ad_type]) + pdu
             
