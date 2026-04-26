@@ -10,9 +10,6 @@ logger = logging.getLogger(__name__)
 class PBAdvLink:
     """
     PB-ADV Link Layer (Source-Aligned with BlueZ 5.86).
-    Fix: In PB-ADV DATA, the GPC byte occupies the position of 'type'.
-    The structure must be: [ID(4)] [Num(1)] [GPC(1)] [Payload...]
-    BUT, for START: BlueZ expects GPC to be followed immediately by Size(2) and FCS(1).
     """
     RETRANSMIT_INTERVAL = 1.0 
     TRANSACTION_TIMEOUT = 30.0
@@ -31,8 +28,8 @@ class PBAdvLink:
         self.tx_lock = asyncio.Lock()
 
     async def open(self, device_uuid: bytes, timeout: float = 10.0):
-        # Open Req: [ID(4)] [GPC/Opcode(0x03)] [UUID(16)]
-        pdu = self.link_id.to_bytes(4, 'big') + b'\x03' + device_uuid
+        # Open Req: [ID(4)] [Num(00)] [Opcode(03)] [UUID(16)] = 22 bytes
+        pdu = self.link_id.to_bytes(4, 'big') + b'\x00\x03' + device_uuid
         self.link_ack_received.clear()
         start_time = time.time()
         while not self.link_ack_received.is_set():
@@ -49,28 +46,26 @@ class PBAdvLink:
         link_id = int.from_bytes(pdu[0:4], 'big')
         if link_id != self.link_id: return
         
-        gpc_byte = pdu[4]
+        # In PB-ADV, index 5 is always Opcode/GPC
+        gpc_byte = pdu[5]
         if (gpc_byte & 0x03) == 0x03:
             if gpc_byte == 0x07: self.link_ack_received.set()
             elif gpc_byte == 0x0B: self.is_opened = False
             return
 
-        # DATA PDU: [ID(4)] [Num(1)] [GPC(1)] [Payload...]
         trans_num = pdu[4]
-        gpc = pdu[5]
-        
-        if (gpc & 0x03) == 0x01:
+        if (gpc_byte & 0x03) == 0x01: # ACK
             if trans_num == self.current_ack_id: self.trans_ack_received.set()
-        elif (gpc & 0x03) == 0x00: # START
+        elif (gpc_byte & 0x03) == 0x00: # START
             total_len = int.from_bytes(pdu[6:8], 'big')
             fcs = pdu[8]
             self.rx_buffer[trans_num] = {0: pdu[9:]}
-            self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': gpc >> 2, 'fcs': fcs}
+            self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': gpc_byte >> 2, 'fcs': fcs}
             self._check_and_reassemble(trans_num)
             self._send_trans_ack(trans_num)
-        elif (gpc & 0x03) == 0x02: # CONT
+        elif (gpc_byte & 0x03) == 0x02: # CONT
             if trans_num in self.rx_buffer:
-                self.rx_buffer[trans_num][gpc >> 2] = pdu[6:]
+                self.rx_buffer[trans_num][gpc_byte >> 2] = pdu[6:]
                 self._check_and_reassemble(trans_num)
 
     def _check_and_reassemble(self, trans_id: int):
@@ -89,22 +84,22 @@ class PBAdvLink:
             fcs = crc8(pdu)
             size = len(pdu)
             
-            # --- BLUEZ PDU ALIGNMENT ---
-            # Overhead for START: ID(4)+Num(1)+GPC(1)+Size(2)+FCS(1) = 9 bytes
-            # Max payload for START = 31 - 5 (Flags/AD) - 9 = 17 bytes
-            # Max payload for CONT = 31 - 5 - 6 = 20 bytes
-            first_seg_len = 17
-            cont_seg_len = 20
+            # --- BLUEZ 5.86 EXACT ALIGNMENT ---
+            # Start: [ID(4)] [Num(1)] [GPC(1)] [Size(2)] [FCS(1)] [Payload]
+            # Max Start Payload = 24 (BlueZ MTU) - 9 (Header) = 15 octets.
+            # Max Cont Payload = 24 (BlueZ MTU) - 6 (Header) = 18 octets.
+            first_seg_len = 15
+            cont_seg_len = 18
             
             max_seg = math.ceil((size - first_seg_len) / cont_seg_len) if size > first_seg_len else 0
             
             segments = []
-            # 1. Start: [ID(4)] [Num(1)] [GPC(1)] [Size(2)] [FCS(1)] [Data(17)]
+            # 1. Start
             header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + \
                      size.to_bytes(2, 'big') + bytes([fcs])
             segments.append(header + pdu[:first_seg_len])
             
-            # 2. Cont: [ID(4)] [Num(1)] [GPC(1)] [Data(20)]
+            # 2. Cont
             for i in range(1, max_seg + 1):
                 header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02])
                 start = first_seg_len + (i-1) * cont_seg_len
