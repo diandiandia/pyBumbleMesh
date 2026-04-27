@@ -2,3 +2,5 @@
 .git
 bluez-5.86
 __pycache__
+GEMINI.md
+pyBumbleMesh.egg-info

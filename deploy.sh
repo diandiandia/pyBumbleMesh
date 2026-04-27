@@ -21,6 +21,8 @@ sshpass -p "$REMOTE_PASSWORD" rsync -avz -e 'ssh -o StrictHostKeyChecking=no' \
     --exclude '.git' \
     --exclude 'bluez-5.86' \
     --exclude '__pycache__' \
+    --exclude 'GEMINI.md' \
+    --exclude 'pyBumbleMesh.egg-info' \
     ./ $REMOTE_USER@$REMOTE_HOST:$REMOTE_DIR
 
 # Setup environment on the Pi using sshpass

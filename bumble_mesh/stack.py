@@ -56,7 +56,7 @@ class MeshStack:
     def _on_unprovisioned_device(self, uuid, rssi, oob_info):
         logger.info(f"Found Unprovisioned Device: UUID={uuid.hex()}, RSSI={rssi}, OOB={oob_info.hex()}")
 
-    async def provision_device(self, uuid: bytes):
+    async def provision_device(self, uuid: bytes, auth_value: bytes = None):
         """Starts a full PB-ADV provisioning process for a device."""
         nodes = self.storage.get_nodes()
         next_addr = self.unicast_address + 1
@@ -69,6 +69,8 @@ class MeshStack:
         await pb_link.open(uuid)
         
         session = ProvisioningSession()
+        if auth_value:
+            session.set_auth_value(auth_value)
         self.provisioning_states[link_id] = session
         
         def on_pdu(pdu):

@@ -11,7 +11,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger(__name__)
 
 async def main():
-    # 允许通过命令行指定 hci 编号，例如: python -m examples.interactive_provisioner hci-socket:1
+    # 允许通过命令行指定 hci 编号，例如: python -m examples.interactive_provisioner hci-socket:0
     transport_path = sys.argv[1] if len(sys.argv) > 1 else 'hci-socket:0'
     
     try:
@@ -87,6 +87,16 @@ async def main():
                 if selection.lower() == 'q': return
                 idx = int(selection)
                 target_uuid, _, _ = discovered_devices[idx]
+                
+                auth_str = input("请输入 AuthValue (16字节十六进制，直接回车使用全0): ").strip()
+                try:
+                    auth_value = bytes.fromhex(auth_str) if auth_str else b'\x00' * 16
+                    if len(auth_value) != 16:
+                        print("错误：AuthValue 必须是 16 字节（32个十六进制字符）")
+                        return
+                except ValueError:
+                    print("错误：请输入有效的十六进制字符串")
+                    return
             except (ValueError, IndexError):
                 print("无效的选择。")
                 return
@@ -103,7 +113,7 @@ async def main():
                     if s.state == ProvisioningState.COMPLETE: provisioning_done.set()
             
             stack.bearer.on_pdu = on_pdu_monitored
-            await stack.provision_device(target_uuid)
+            await stack.provision_device(target_uuid, auth_value=auth_value)
             
             try:
                 print("正在交换密钥...")

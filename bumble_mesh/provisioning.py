@@ -48,6 +48,12 @@ class ProvisioningSession:
         self.state = ProvisioningState.INVITE
         return b'\x00' + self.payload_invite
 
+    def set_auth_value(self, auth_value: bytes):
+        """Sets the authentication value (e.g. from OOB)."""
+        if len(auth_value) != 16:
+            raise ValueError("AuthValue must be 16 bytes")
+        self.auth_value = auth_value
+
     def handle_pdu(self, pdu: bytes, **kwargs) -> Optional[bytes]:
         pdu_type = pdu[0]
         if pdu_type == 0x01: # Capabilities
@@ -58,6 +64,14 @@ class ProvisioningSession:
             return self._handle_confirm(pdu)
         elif pdu_type == 0x06: # Random
             return self._handle_random(pdu, **kwargs)
+        elif pdu_type == 0x09: # Failed
+            return self._handle_failed(pdu)
+        return None
+
+    def _handle_failed(self, pdu: bytes) -> None:
+        error_code = pdu[1] if len(pdu) > 1 else 0
+        logger.error(f"Provisioning Failed! Error Code: {error_code:02x}")
+        self.state = ProvisioningState.FAILED
         return None
 
     def _handle_capabilities(self, pdu: bytes) -> bytes:
