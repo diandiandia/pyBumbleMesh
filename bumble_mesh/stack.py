@@ -40,6 +40,9 @@ class MeshStack:
         self.access = AccessLayer()
         self.provisioning_sessions = {} 
         self.provisioning_states = {} 
+        
+        # --- UI CALLBACKS (Your Broadcast System) ---
+        self.on_auth_needed = None # Signature: callback(uuid, method)
 
         self.bearer.on_pdu = self._on_bearer_pdu
         self.bearer.on_unprovisioned_device = self._on_unprovisioned_device
@@ -67,6 +70,7 @@ class MeshStack:
         pdu_queue = asyncio.Queue()
 
         async def pdu_worker():
+            auth_requested = False
             while True:
                 pdu = await pdu_queue.get()
                 try:
@@ -74,19 +78,23 @@ class MeshStack:
                     
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
                     
+                    # Check if we need to "Broadcast" an auth request
+                    if session.state == ProvisioningState.AUTH_INPUT and not auth_requested:
+                        auth_requested = True
+                        if self.on_auth_needed:
+                            asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
+
                     if resp:
-                        # DECOUPLE: Handle PDU and return response. Sending is non-blocking to worker.
-                        async def send_follow_up(pdu_to_send):
-                            if pdu_to_send[0] == 0x02: # START
-                                success = await pb_link.send_transaction(pdu_to_send)
+                        async def send_task(p_to_send):
+                            if p_to_send[0] == 0x02: # START
+                                success = await pb_link.send_transaction(p_to_send)
                                 if success:
-                                    session.trigger_auth_input()
-                                    await asyncio.sleep(2.0) # Background listen gap
+                                    # Provisioner sends its Public Key FIRST (Spec 5.4.1.2)
                                     await pb_link.send_transaction(session.get_public_key_pdu())
                             else:
-                                await pb_link.send_transaction(pdu_to_send)
+                                await pb_link.send_transaction(p_to_send)
                         
-                        asyncio.create_task(send_follow_up(resp))
+                        asyncio.create_task(send_task(resp))
 
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
@@ -99,27 +107,24 @@ class MeshStack:
         worker_task = asyncio.create_task(pdu_worker())
         pb_link.on_provisioning_pdu = lambda pdu: pdu_queue.put_nowait(pdu)
         
-        # Start initial invite in background
         asyncio.create_task(pb_link.send_transaction(session.invite()))
         await worker_task
 
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
-        """Resumes a provisioning session after the user provides a numeric PIN."""
         for link_id, session in self.provisioning_states.items():
             if session.state == ProvisioningState.AUTH_INPUT:
-                # SAFETY: Wait for Peer's Public Key (shared_secret is the flag)
+                # Wait for Peer's Public Key
                 wait_start = time.time()
                 while session.shared_secret is None:
                     if time.time() - wait_start > 15.0:
                         logger.error("Timed out waiting for Peer Public Key.")
                         session.state = ProvisioningState.FAILED
                         return
-                    await asyncio.sleep(0.5)
+                    await asyncio.sleep(0.2)
                 
-                logger.info("Peer Public Key received. Proceeding with AuthValue...")
+                logger.info("Peer Public Key received. Resuming with PIN.")
                 session.set_auth_value(pin.to_bytes(16, 'big'))
-                confirm_pdu = session._send_confirm()
-                asyncio.create_task(self.provisioning_sessions[link_id].send_transaction(confirm_pdu))
+                asyncio.create_task(self.provisioning_sessions[link_id].send_transaction(session._send_confirm()))
                 break
 
     def _on_bearer_pdu(self, pdu: bytes):
@@ -128,7 +133,6 @@ class MeshStack:
             if link_id in self.provisioning_sessions:
                 self.provisioning_sessions[link_id].handle_pdu(pdu)
                 return
-
         result = self.network.decrypt_pdu(pdu)
         if not result: return
         src, dst, transport_pdu_raw = result
