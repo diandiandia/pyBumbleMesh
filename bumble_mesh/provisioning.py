@@ -20,6 +20,7 @@ class ProvisioningState(enum.Enum):
     DATA = 8
     COMPLETE = 9
     FAILED = 10
+    DATA_SENT = 11
 
 class ProvisioningSession:
     def __init__(self, role: str = 'provisioner'):
@@ -75,6 +76,10 @@ class ProvisioningSession:
             return self._handle_confirm(pdu)
         elif pdu_type == 0x06: # Random
             return self._handle_random(pdu, **kwargs)
+        elif pdu_type == 0x08: # Complete
+            logger.info("Received Provisioning Complete PDU from device")
+            self.state = ProvisioningState.COMPLETE
+            return None
         elif pdu_type == 0x09: # Failed
             return self._handle_failed(pdu)
         return None
@@ -151,5 +156,5 @@ class ProvisioningSession:
         session_nonce = k1(self.shared_secret, self.provisioning_salt, b"prsn")[3:16]
         prov_data = net_key + b'\x00\x00' + b'\x00' + iv_index.to_bytes(4, 'big') + unicast_address.to_bytes(2, 'big')
         encrypted_data = aes_ccm_encrypt(session_key, session_nonce, prov_data, b'', 8)
-        self.state = ProvisioningState.COMPLETE
+        self.state = ProvisioningState.DATA_SENT
         return b'\x07' + encrypted_data

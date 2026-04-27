@@ -73,7 +73,10 @@ class MeshStack:
             while True:
                 pdu = await pdu_queue.get()
                 try:
-                    if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE): break
+                    # Current session status
+                    if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE):
+                        break
+                    
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
                     
                     if resp:
@@ -96,9 +99,13 @@ class MeshStack:
                             else:
                                 await pb_link.send_transaction(p_to_send)
                         
-                        if session.state == ProvisioningState.COMPLETE: await send_task(resp)
-                        else: asyncio.create_task(send_task(resp))
+                        # Wait for Data TX to finish before checking final state
+                        if pdu[0] == 0x06: # We just received Random, 'resp' is Data (Type 07)
+                            await send_task(resp)
+                        else:
+                            asyncio.create_task(send_task(resp))
 
+                    # Re-check state after handling PDU
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
                         self.storage.save_node(next_addr, uuid, session.shared_secret)
