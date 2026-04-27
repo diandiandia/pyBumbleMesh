@@ -58,6 +58,9 @@ class MeshStack:
         self.provisioning_sessions = {} 
         self.provisioning_states = {} 
 
+        self.bearer.on_pdu = self._on_bearer_pdu
+        self.bearer.on_unprovisioned_device = self._on_unprovisioned_device
+
     async def remote_provision_device(self, server_addr: int, uuid: bytes):
         """Provisions a device via a Remote Provisioning Server node."""
         nodes = self.storage.get_nodes()
