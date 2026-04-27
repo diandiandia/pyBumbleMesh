@@ -80,24 +80,21 @@ class MeshStack:
             while True:
                 pdu = await pdu_queue.get()
                 try:
-                    if session.state == ProvisioningState.FAILED:
+                    if session.state == ProvisioningState.FAILED or session.state == ProvisioningState.COMPLETE:
                         break
                         
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
                     if resp:
-                        # Send the response (e.g. START)
-                        success = await pb_link.send_transaction(resp)
-                        
-                        # Only proceed if the transaction was acknowledged and we haven't failed
-                        if not success or session.state == ProvisioningState.FAILED:
-                            logger.error("Transaction failed or session entered FAILED state, stopping worker.")
-                            break
-
-                        # Sequential follow-up: If START was sent, follow with PUBKEY after a small gap
+                        # If we just received CAPABILITIES, we send START and then PUBKEY
                         if resp[0] == 0x02:
-                            await asyncio.sleep(0.5) 
-                            pub_key_pdu = session.get_public_key_pdu()
-                            await pb_link.send_transaction(pub_key_pdu)
+                            success = await pb_link.send_transaction(resp)
+                            if success and session.state != ProvisioningState.FAILED:
+                                # Small delay before sending our PubKey to let peer prepare
+                                await asyncio.sleep(0.3)
+                                await pb_link.send_transaction(session.get_public_key_pdu())
+                        else:
+                            # Standard single response
+                            await pb_link.send_transaction(resp)
                     
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
