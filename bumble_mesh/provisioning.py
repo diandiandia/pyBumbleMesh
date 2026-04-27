@@ -95,15 +95,15 @@ class ProvisioningSession:
         output_action_mask = int.from_bytes(self.payload_capabilities[6:8], 'big')
         
         if output_size > 0:
-            if output_action_mask & 0x10: # Bit 4: Output Numeric
+            if output_action_mask & 0x08: # Bit 3: Output Numeric (Fixed: was 0x10)
                 logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
                 self.auth_method = 0x02 
-                self.auth_action = 0x04 
+                self.auth_action = 0x04 # Action 0x04 is Output Numeric
                 self.auth_size = output_size
-            elif output_action_mask & 0x08: # Bit 3: Output Alphanumeric
+            elif output_action_mask & 0x10: # Bit 4: Output Alphanumeric (Fixed: was 0x08)
                 logger.info(f"Device supports OutputAlphanumeric OOB (Size: {output_size})")
                 self.auth_method = 0x02
-                self.auth_action = 0x03
+                self.auth_action = 0x03 # Action 0x03 is Output Alphanumeric
                 self.auth_size = output_size
             else:
                 logger.info("Device has Output OOB but no supported actions, falling back to No OOB")

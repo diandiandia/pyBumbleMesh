@@ -96,7 +96,9 @@ async def main():
                         if s.state == ProvisioningState.AUTH_INPUT:
                             print("\n" + "!"*20)
                             print("设备已激活！请查看 p1 (test-mesh) 屏幕显示的 PIN 码。")
-                            pin_str = input("请输入该 PIN 码 (例如 123456): ").strip()
+                            # Run blocking input in a separate thread to avoid freezing the stack
+                            pin_str = await asyncio.to_thread(input, "请输入该 PIN 码 (例如 123456): ")
+                            pin_str = pin_str.strip()
                             try:
                                 pin = int(pin_str)
                                 await stack.resume_provisioning_with_pin(target_uuid, pin)
