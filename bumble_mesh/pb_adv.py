@@ -91,8 +91,13 @@ class PBAdvLink:
             if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
             self.rx_buffer[trans_num][seg_idx] = pdu[6:]
             logger.info(f"PB-ADV RX Cont: Trans {trans_num:02x}, SegIdx {seg_idx}")
-            self._send_trans_ack(trans_num) # BlueZ 5.86 expects ACK for EVERY segment
-            self._check_and_reassemble(trans_num)
+            self._send_trans_ack(trans_num)
+            
+            # If we already have info (Start arrived before or retransmitted), check reassemble
+            if trans_num in self.rx_info:
+                self._check_and_reassemble(trans_num)
+            else:
+                logger.info(f"Waiting for Start segment for Trans {trans_num:02x}")
 
     def _check_and_reassemble(self, trans_id: int):
         if trans_id not in self.rx_info: return

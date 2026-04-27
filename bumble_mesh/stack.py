@@ -88,9 +88,14 @@ class MeshStack:
                                             asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
                                     
                                     # Silence window: Let BlueZ send its PubKey while we listen
-                                    logger.info("START confirmed. Listening for Peer Public Key (3s silence)...")
-                                    await asyncio.sleep(3.0)
-                                    await pb_link.send_transaction(session.get_public_key_pdu())
+                                    logger.info("START confirmed. Listening for Peer Public Key (5s silence)...")
+                                    await asyncio.sleep(5.0) # Increased from 3.0
+                                    
+                                    # If we haven't received device's pubkey yet, send ours
+                                    if session.shared_secret is None:
+                                        await pb_link.send_transaction(session.get_public_key_pdu())
+                                    else:
+                                        logger.info("Peer Public Key already received during silence. Skipping local TX trigger.")
                             else:
                                 await pb_link.send_transaction(p_to_send)
                         
