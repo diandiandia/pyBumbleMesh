@@ -29,6 +29,7 @@ class PBAdvLink:
         self.rx_buffer: Dict[int, Dict[int, bytes]] = {} # {trans_num: {seg_idx: data}}
         self.rx_info: Dict[int, Dict] = {} # {trans_num: {total_len, seg_n, fcs}}
         self.tx_lock = asyncio.Lock()
+        self.transaction_lock = asyncio.Lock() # New lock for whole transactions
 
     async def _send_wrapper(self, pdu: bytes):
         async with self.tx_lock:
@@ -113,40 +114,41 @@ class PBAdvLink:
             logger.error(f"FCS Mismatch Trans {trans_id:02x}")
 
     async def send_transaction(self, pdu: bytes) -> bool:
-        self.local_trans_num = (self.local_trans_num + 1) % 256
-        fcs = crc8(pdu)
-        size = len(pdu)
-        
-        if size > 20:
-            max_seg = 1 + ((size - 20 - 1) // 23)
-            init_size = 20
-        else:
-            max_seg = 0
-            init_size = size
-
-        segments = [self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + size.to_bytes(2, 'big') + bytes([fcs]) + pdu[:init_size]]
-        for i in range(1, max_seg + 1):
-            segments.append(self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02]) + pdu[20+(i-1)*23 : 20+i*23])
-
-        self.current_ack_id = self.local_trans_num
-        self.trans_ack_received.clear()
-        start_time = time.time()
-        logger.info(f"TX Trans {self.local_trans_num} (Type: {pdu[0]:02x}, Size: {size}, Segs: {len(segments)})")
-        
-        while not self.trans_ack_received.is_set():
-            if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
-            for seg in segments:
-                if self.trans_ack_received.is_set(): break
-                await self._send_wrapper(seg)
-                await asyncio.sleep(0.12) # Gap for radio listening
+        async with self.transaction_lock:
+            self.local_trans_num = (self.local_trans_num + 1) % 256
+            fcs = crc8(pdu)
+            size = len(pdu)
             
-            wait_time = 0.8 + random.random() * 0.7
-            try: await asyncio.wait_for(self.trans_ack_received.wait(), wait_time)
-            except asyncio.TimeoutError: continue
-        
-        success = self.trans_ack_received.is_set()
-        self.current_ack_id = None
-        return success
+            if size > 20:
+                max_seg = 1 + ((size - 20 - 1) // 23)
+                init_size = 20
+            else:
+                max_seg = 0
+                init_size = size
+
+            segments = [self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + size.to_bytes(2, 'big') + bytes([fcs]) + pdu[:init_size]]
+            for i in range(1, max_seg + 1):
+                segments.append(self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02]) + pdu[20+(i-1)*23 : 20+i*23])
+
+            self.current_ack_id = self.local_trans_num
+            self.trans_ack_received.clear()
+            start_time = time.time()
+            logger.info(f"TX Trans {self.local_trans_num} (Type: {pdu[0]:02x}, Size: {size}, Segs: {len(segments)})")
+            
+            while not self.trans_ack_received.is_set():
+                if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
+                for seg in segments:
+                    if self.trans_ack_received.is_set(): break
+                    await self._send_wrapper(seg)
+                    await asyncio.sleep(0.12) # Gap for radio listening
+                
+                wait_time = 0.8 + random.random() * 0.7
+                try: await asyncio.wait_for(self.trans_ack_received.wait(), wait_time)
+                except asyncio.TimeoutError: continue
+            
+            success = self.trans_ack_received.is_set()
+            self.current_ack_id = None
+            return success
 
     def _send_trans_ack(self, trans_id: int):
         pdu = self.link_id.to_bytes(4, 'big') + bytes([trans_id, 0x01])

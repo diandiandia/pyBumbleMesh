@@ -121,9 +121,16 @@ class MeshStack:
                         return
                     await asyncio.sleep(0.5)
                 
-                logger.info("Keys ready. Sending Confirmation.")
+                logger.info("Keys ready. Sending Input Complete and Confirmation.")
                 session.set_auth_value(pin.to_bytes(16, 'big'))
-                asyncio.create_task(self.provisioning_sessions[link_id].send_transaction(session._send_confirm()))
+                
+                async def do_resume():
+                    # 1. Send Input Complete (Required for Output OOB)
+                    await self.provisioning_sessions[link_id].send_transaction(b'\x04')
+                    # 2. Send Provisioning Confirm
+                    await self.provisioning_sessions[link_id].send_transaction(session._send_confirm())
+                
+                asyncio.create_task(do_resume())
                 break
 
     def _on_bearer_pdu(self, pdu: bytes):

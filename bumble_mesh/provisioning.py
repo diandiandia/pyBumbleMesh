@@ -36,12 +36,12 @@ class ProvisioningSession:
         self.auth_action = 0
         self.auth_size = 0
 
-        # Exact Payloads (EXCLUDING Type Byte) for ConfirmationInputs
-        self.payload_invite = b''       # 1 byte
-        self.payload_capabilities = b'' # 11 bytes
-        self.payload_start = b''        # 5 bytes
-        self.payload_pubkey_p = b''     # 64 bytes
-        self.payload_pubkey_device = b'' # 64 bytes
+        # Full PDUs (INCLUDING Type Byte) for ConfirmationInputs
+        self.pdu_invite = b''       # 2 bytes
+        self.pdu_capabilities = b'' # 12 bytes
+        self.pdu_start = b''        # 6 bytes
+        self.pdu_pubkey_p = b''     # 65 bytes
+        self.pdu_pubkey_device = b'' # 65 bytes
 
         self.auth_value = b'\x00' * 16
         self.provisioner_random = os.urandom(16)
@@ -49,9 +49,9 @@ class ProvisioningSession:
         self.device_confirmation: Optional[bytes] = None
 
     def invite(self, attention_duration: int = 0) -> bytes:
-        self.payload_invite = bytes([attention_duration])
+        self.pdu_invite = b'\x00' + bytes([attention_duration])
         self.state = ProvisioningState.INVITE
-        return b'\x00' + self.payload_invite
+        return self.pdu_invite
 
     def set_auth_value(self, auth_value: bytes):
         """Sets the authentication value (e.g. from OOB)."""
@@ -68,6 +68,9 @@ class ProvisioningSession:
             return self._handle_capabilities(pdu)
         elif pdu_type == 0x03: # Public Key
             return self._handle_public_key(pdu)
+        elif pdu_type == 0x04: # Input Complete
+            logger.info("Received Input Complete from device")
+            return None
         elif pdu_type == 0x05: # Confirm
             return self._handle_confirm(pdu)
         elif pdu_type == 0x06: # Random
@@ -84,9 +87,9 @@ class ProvisioningSession:
 
     def _handle_capabilities(self, pdu: bytes) -> Optional[bytes]:
         if self.state != ProvisioningState.INVITE: return None
-        self.payload_capabilities = pdu[1:]
-        output_size = self.payload_capabilities[5]
-        output_action_mask = int.from_bytes(self.payload_capabilities[6:8], 'big')
+        self.pdu_capabilities = pdu
+        output_size = pdu[5]
+        output_action_mask = int.from_bytes(pdu[6:8], 'big')
         
         if output_size > 0 and (output_action_mask & 0x0008):
             logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
@@ -96,16 +99,16 @@ class ProvisioningSession:
             logger.info("Using No OOB authentication")
             self.auth_method, self.auth_action, self.auth_size = 0, 0, 0
 
-        self.payload_start = bytes([0x00, 0x00, self.auth_method, self.auth_action, self.auth_size])
+        self.pdu_start = b'\x02' + bytes([0x00, 0x00, self.auth_method, self.auth_action, self.auth_size])
         self.state = ProvisioningState.PUBLIC_KEY
-        return b'\x02' + self.payload_start
+        return self.pdu_start
 
     def get_public_key_pdu(self) -> bytes:
-        self.payload_pubkey_p = self.local_key.x + self.local_key.y
-        return b'\x03' + self.payload_pubkey_p
+        self.pdu_pubkey_p = b'\x03' + self.local_key.x + self.local_key.y
+        return self.pdu_pubkey_p
 
     def _handle_public_key(self, pdu: bytes) -> Optional[bytes]:
-        self.payload_pubkey_device = pdu[1:]
+        self.pdu_pubkey_device = pdu
         self.remote_public_key_x = pdu[1:33]
         self.remote_public_key_y = pdu[33:65]
         self.shared_secret = self.local_key.dh(self.remote_public_key_x, self.remote_public_key_y)
@@ -119,8 +122,8 @@ class ProvisioningSession:
         return None
 
     def _send_confirm(self) -> bytes:
-        inputs = self.payload_invite + self.payload_capabilities + self.payload_start + \
-                 self.payload_pubkey_p + self.payload_pubkey_device
+        inputs = self.pdu_invite + self.pdu_capabilities + self.pdu_start + \
+                 self.pdu_pubkey_p + self.pdu_pubkey_device
         self.provisioning_salt = s1(inputs)
         conf_key = k1(self.shared_secret, self.provisioning_salt, b"prck")
         conf_p = aes_cmac(conf_key, self.provisioner_random + self.auth_value)
