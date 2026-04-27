@@ -90,23 +90,23 @@ class ProvisioningSession:
         self.payload_capabilities = pdu[1:]
         
         # Capability Mapping (Strictly aligned with BlueZ 5.86 / Mesh v1.0)
-        # BlueZ sends these fields in Little Endian and expects Action codes:
-        # 0x03: Output Numeric  (Bit 3 in mask)
-        # 0x04: Output Alpha    (Bit 4 in mask)
+        # Mesh v1.0 Table 5.15:
+        # 0x03: Output Numeric  (Linked to Bit 3 in mask)
+        # 0x04: Output Alpha    (Linked to Bit 4 in mask)
         output_size = self.payload_capabilities[5]
-        # Parse mask as little-endian to match BlueZ's link->caps[6] byte-check logic
-        output_action_mask = int.from_bytes(self.payload_capabilities[6:8], 'little')
+        # v1.0/v1.1 Specs both use Big Endian for multi-octet fields
+        output_action_mask = int.from_bytes(self.payload_capabilities[6:8], 'big')
         
         if output_size > 0:
             if output_action_mask & 0x0008: # Bit 3: Output Numeric
                 logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
                 self.auth_method = 0x02 
-                self.auth_action = 0x03 # BlueZ v1.0 Digit Action
+                self.auth_action = 0x03 # v1.0 Numeric Action is 3
                 self.auth_size = output_size
             elif output_action_mask & 0x0010: # Bit 4: Output Alphanumeric
                 logger.info(f"Device supports OutputAlphanumeric OOB (Size: {output_size})")
                 self.auth_method = 0x02
-                self.auth_action = 0x04 # BlueZ v1.0 Alpha Action
+                self.auth_action = 0x04 # v1.0 Alpha Action is 4
                 self.auth_size = output_size
             else:
                 logger.info("Device has Output OOB but no supported actions, falling back to No OOB")
