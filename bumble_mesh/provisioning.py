@@ -81,19 +81,23 @@ class ProvisioningSession:
         self.state = ProvisioningState.FAILED
         return None
 
-    def _handle_capabilities(self, pdu: bytes) -> bytes:
+    def _handle_capabilities(self, pdu: bytes) -> Optional[bytes]:
+        # Idempotency check: If we already processed capabilities, ignore duplicates
+        if self.state != ProvisioningState.INVITE:
+            return None
+
         # pdu is [0x01, data(11)]
         self.payload_capabilities = pdu[1:]
         
-        # Capability Mapping (Simplified for BlueZ test-mesh)
-        # BlueZ test-mesh usually has OutputNumeric (Bit 3, Action 0x0008)
+        # Capability Mapping (Strictly aligned with BlueZ test-mesh)
+        # BlueZ test-mesh has OutputNumeric (Bit 3, mask 0x0008)
         output_size = self.payload_capabilities[5]
         output_action = int.from_bytes(self.payload_capabilities[6:8], 'big')
         
         if output_size > 0 and (output_action & 0x08):
             logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
             self.auth_method = 0x02 # Output OOB
-            self.auth_action = 0x02 # Output Numeric
+            self.auth_action = 0x04 # Output Numeric (Fixed: 0x04 is Numeric, 0x02 was Vibrate)
             self.auth_size = output_size
         else:
             logger.info("Using No OOB authentication")
