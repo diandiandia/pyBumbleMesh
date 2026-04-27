@@ -59,6 +59,14 @@ class PBAdvLink:
             return
 
         trans_num = pdu[4]
+        
+        # --- PREEMPTIVE STOP ---
+        # If we see ANY new transaction number from the peer, it implies they received 
+        # our last transaction (if any). Stop our retransmits to clear the channel.
+        if (gpc_byte & 0x03) == 0x00: # START of a new inbound transaction
+            if self.current_ack_id is not None and trans_num != self.current_ack_id:
+                self.trans_ack_received.set()
+
         if (pdu[5] & 0x03) == 0x01: # ACK
             if trans_num == self.current_ack_id: self.trans_ack_received.set()
         elif (pdu[5] & 0x03) == 0x00: # START
@@ -68,6 +76,7 @@ class PBAdvLink:
             self.rx_buffer[trans_num] = {0: pdu[9:]}
             self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
             self._check_and_reassemble(trans_num)
+            # BlueZ expects an ACK for START to stop its retransmits
             self._send_trans_ack(trans_num)
         elif (pdu[5] & 0x03) == 0x02: # CONT
             if trans_num in self.rx_buffer:
@@ -80,7 +89,10 @@ class PBAdvLink:
         if len(buffer) == info['seg_n'] + 1:
             full_pdu = b''.join(buffer[i] for i in range(info['seg_n'] + 1))[:info['total_len']]
             if crc8(full_pdu) == info['fcs']:
+                logger.info(f"PB-ADV Transaction {trans_id:02x} Reassembled ({len(full_pdu)} bytes)")
                 if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
+                # Send final ACK on completion
+                self._send_trans_ack(trans_id)
             del self.rx_buffer[trans_id]
             del self.rx_info[trans_id]
 
