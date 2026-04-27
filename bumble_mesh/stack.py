@@ -87,15 +87,20 @@ class MeshStack:
                                         if self.on_auth_needed:
                                             asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
                                     
-                                    # Silence window: Let BlueZ send its PubKey while we listen
-                                    logger.info("START confirmed. Listening for Peer Public Key (5s silence)...")
-                                    await asyncio.sleep(5.0) # Increased from 3.0
+                                    # NEW RELIABILITY STRATEGY: 
+                                    # As a Provisioner, we stay SILENT and wait for the Device's Public Key first.
+                                    # This avoids half-duplex collisions during the large 65-byte PK exchange.
+                                    logger.info("START confirmed. Waiting for DEVICE Public Key (Sequential Mode)...")
                                     
-                                    # If we haven't received device's pubkey yet, send ours
-                                    if session.shared_secret is None:
-                                        await pb_link.send_transaction(session.get_public_key_pdu())
-                                    else:
-                                        logger.info("Peer Public Key already received during silence. Skipping local TX trigger.")
+                                    wait_start = time.time()
+                                    while session.shared_secret is None:
+                                        if time.time() - wait_start > 20.0:
+                                            logger.warning("Still waiting for Device PK... triggering local PK as fallback.")
+                                            break
+                                        await asyncio.sleep(0.5)
+                                    
+                                    # Now that we've heard them (or timed out), we send ours.
+                                    await pb_link.send_transaction(session.get_public_key_pdu())
                             else:
                                 await pb_link.send_transaction(p_to_send)
                         

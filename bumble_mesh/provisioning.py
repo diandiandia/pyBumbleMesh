@@ -109,8 +109,7 @@ class ProvisioningSession:
         return self.pdu_start
 
     def get_public_key_pdu(self) -> bytes:
-        self.pdu_pubkey_p = b'\x03' + self.local_key.x + self.local_key.y
-        return self.pdu_pubkey_p
+        return b'\x03' + self.local_key.x + self.local_key.y
 
     def _handle_public_key(self, pdu: bytes) -> Optional[bytes]:
         self.pdu_pubkey_device = pdu
@@ -127,8 +126,9 @@ class ProvisioningSession:
         return None
 
     def _send_confirm(self) -> bytes:
-        inputs = self.pdu_invite + self.pdu_capabilities + self.pdu_start + \
-                 self.pdu_pubkey_p + self.pdu_pubkey_device
+        # Note: BlueZ excludes opcodes from confirmation inputs
+        inputs = self.pdu_invite[1:] + self.pdu_capabilities[1:] + self.pdu_start[1:] + \
+                 self.local_key.x + self.local_key.y + self.remote_public_key_x + self.remote_public_key_y
         self.provisioning_salt = s1(inputs)
         conf_key = k1(self.shared_secret, self.provisioning_salt, b"prck")
         conf_p = aes_cmac(conf_key, self.provisioner_random + self.auth_value)
