@@ -90,22 +90,27 @@ class PBAdvLink:
             fcs = crc8(pdu)
             size = len(pdu)
             
-            # --- STRICT BLUEZ 5.86 COMPATIBILITY (MTU = 24) ---
-            if size > 15:
-                max_seg = 1 + ((size - 15 - 1) // 18)
-                init_size = 15
+            # --- EXACT BLUEZ 5.86 LOGIC (Fixed MTU Offsets) ---
+            # BlueZ reassembly assumes:
+            # Seg 0 (Start): 20 octets of data
+            # Seg 1-N (Cont): 23 octets of data
+            if size > 20:
+                max_seg = 1 + ((size - 20 - 1) // 23)
+                init_size = 20
             else:
                 max_seg = 0
                 init_size = size
 
             segments = []
+            # 1. Start Segment
             header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + \
                      size.to_bytes(2, 'big') + bytes([fcs])
             segments.append(header + pdu[:init_size])
             
+            # 2. Continuation Segments
             consumed = init_size
             for i in range(1, max_seg + 1):
-                seg_size = min(18, size - consumed)
+                seg_size = min(23, size - consumed)
                 header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02])
                 segments.append(header + pdu[consumed : consumed + seg_size])
                 consumed += seg_size
