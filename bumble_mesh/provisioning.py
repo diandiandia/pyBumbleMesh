@@ -107,6 +107,7 @@ class ProvisioningSession:
 
         # Construct Start Payload (5 bytes)
         self.payload_start = bytes([0x00, 0x00, self.auth_method, self.auth_action, self.auth_size])
+        logger.info(f"Sending PROV_START: {self.payload_start.hex()} (Method={self.auth_method}, Action={self.auth_action}, Size={self.auth_size})")
         self.state = ProvisioningState.PUBLIC_KEY
         return b'\x02' + self.payload_start
 
