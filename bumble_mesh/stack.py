@@ -63,7 +63,7 @@ class MeshStack:
         if nodes: next_addr = max(n['address'] for n in nodes) + 1
             
         link_id = random.getrandbits(32)
-        pb_link = PBAdvLink(link_id, lambda pdu: asyncio.create_task(self.bearer.send_pdu(pdu, is_pb_adv=True)))
+        pb_link = PBAdvLink(link_id, lambda pdu: self.bearer.send_pdu(pdu, is_pb_adv=True))
         self.provisioning_sessions[link_id] = pb_link
         
         await pb_link.open(uuid)

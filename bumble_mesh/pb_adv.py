@@ -14,9 +14,9 @@ class PBAdvLink:
     RETRANSMIT_INTERVAL = 1.0 
     TRANSACTION_TIMEOUT = 30.0
 
-    def __init__(self, link_id: int, send_pdu_cb: Callable[[bytes], None]):
+    def __init__(self, link_id: int, send_pdu_cb: Callable[[bytes], any]):
         self.link_id = link_id
-        self.send_pdu_cb = send_pdu_cb
+        self.send_pdu_cb = send_pdu_cb # Now expected to be an async function or return a coroutine
         self.local_trans_num = 0x00
         self.on_provisioning_pdu: Optional[Callable[[bytes], None]] = None
         self.is_opened = False
@@ -27,6 +27,12 @@ class PBAdvLink:
         self.rx_info: Dict[int, Dict] = {} 
         self.tx_lock = asyncio.Lock()
 
+    async def _send_wrapper(self, pdu: bytes):
+        """Helper to call and await the send callback."""
+        res = self.send_pdu_cb(pdu)
+        if asyncio.iscoroutine(res):
+            await res
+
     async def open(self, device_uuid: bytes, timeout: float = 10.0):
         # Open Req: [ID(4)] [Num(00)] [Opcode(03)] [UUID(16)]
         pdu = self.link_id.to_bytes(4, 'big') + b'\x00\x03' + device_uuid
@@ -34,7 +40,7 @@ class PBAdvLink:
         start_time = time.time()
         while not self.link_ack_received.is_set():
             if time.time() - start_time > timeout: raise asyncio.TimeoutError("Link Open Timeout")
-            self.send_pdu_cb(pdu)
+            await self._send_wrapper(pdu)
             try: await asyncio.wait_for(self.link_ack_received.wait(), self.RETRANSMIT_INTERVAL)
             except asyncio.TimeoutError: continue
         self.is_opened = True
@@ -85,12 +91,6 @@ class PBAdvLink:
             size = len(pdu)
             
             # --- STRICT BLUEZ 5.86 COMPATIBILITY (MTU = 24) ---
-            # BlueZ defines PB_ADV_MTU as 24.
-            # Start Segment Header: ID(4) + Num(1) + GPC(1) + Size(2) + FCS(1) = 9 bytes.
-            # Max Data in Start = 24 - 9 = 15 octets.
-            # Cont Segment Header: ID(4) + Num(1) + GPC(1) = 6 bytes.
-            # Max Data in Cont = 24 - 6 = 18 octets.
-            
             if size > 15:
                 max_seg = 1 + ((size - 15 - 1) // 18)
                 init_size = 15
@@ -99,12 +99,10 @@ class PBAdvLink:
                 init_size = size
 
             segments = []
-            # 1. Start Segment
             header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + \
                      size.to_bytes(2, 'big') + bytes([fcs])
             segments.append(header + pdu[:init_size])
             
-            # 2. Continuation Segments
             consumed = init_size
             for i in range(1, max_seg + 1):
                 seg_size = min(18, size - consumed)
@@ -119,10 +117,14 @@ class PBAdvLink:
             
             while not self.trans_ack_received.is_set():
                 if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
-                for seg in segments: self.send_pdu_cb(seg)
+                for seg in segments:
+                    if self.trans_ack_received.is_set(): break
+                    await self._send_wrapper(seg)
+                    await asyncio.sleep(0.01) # Small delay to ensure HCI order and receiver readiness
+                
                 try: await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
                 except asyncio.TimeoutError: continue
 
     def _send_trans_ack(self, trans_id: int):
         pdu = self.link_id.to_bytes(4, 'big') + bytes([trans_id, 0x01])
-        self.send_pdu_cb(pdu)
+        asyncio.create_task(self._send_wrapper(pdu))
