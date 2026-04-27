@@ -129,6 +129,15 @@ class ProvisioningSession:
         self.payload_pubkey_p = self.local_key.x + self.local_key.y
         return b'\x03' + self.payload_pubkey_p
 
+    def trigger_auth_input(self):
+        """Forces state to AUTH_INPUT if using OOB, allowing parallel input and handshake."""
+        if self.auth_method != 0x00 and self.state != ProvisioningState.COMPLETE:
+            print("\n" + "*"*40)
+            print("!!! AUTHENTICATION REQUIRED !!!")
+            print("*"*40 + "\n")
+            logger.info("Transitioning to AUTH_INPUT to wait for PIN...")
+            self.state = ProvisioningState.AUTH_INPUT
+
     def _handle_public_key(self, pdu: bytes) -> Optional[bytes]:
         # pdu is [0x03, X(32), Y(32)]
         self.payload_pubkey_device = pdu[1:]
@@ -136,17 +145,17 @@ class ProvisioningSession:
         self.remote_public_key_y = pdu[33:65]
         
         self.shared_secret = self.local_key.dh(self.remote_public_key_x, self.remote_public_key_y)
+        logger.info("Device Public Key received and Shared Secret calculated.")
         
-        if self.auth_method != 0x00:
-            print("\n" + "*"*40)
-            print("!!! AUTHENTICATION REQUIRED !!!")
-            print("*"*40 + "\n")
-            logger.info("Waiting for User Input...")
-            self.state = ProvisioningState.AUTH_INPUT
-            return None # Pause and wait for set_auth_value
+        # If we are already in AUTH_INPUT (waiting for PIN), stay there.
+        # If we were in PUBLIC_KEY, we might transition to CONFIRM if No OOB.
+        if self.auth_method == 0x00:
+            self.state = ProvisioningState.CONFIRM
+            return self._send_confirm()
         
-        self.state = ProvisioningState.CONFIRM
-        return self._send_confirm()
+        # If OOB is used, we remain in AUTH_INPUT (or transition to it if not already there)
+        self.state = ProvisioningState.AUTH_INPUT
+        return None
 
     def _send_confirm(self) -> bytes:
         # Inputs = Invite(1) || Caps(11) || Start(5) || PubP(64) || PubD(64) = 145 bytes

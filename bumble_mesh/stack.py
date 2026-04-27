@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import time
 from .bearer import AdvBearer
 from .network import NetworkLayer
 from .transport import LowerTransportLayer
@@ -76,10 +77,15 @@ class MeshStack:
                         if resp[0] == 0x02:
                             success = await pb_link.send_transaction(resp)
                             if success:
-                                # BlueZ acceptor is aggressive. We MUST listen for its PubKey FIRST.
-                                logger.info("START ACKed. Entering 3s Listen-Only mode for Peer Public Key...")
-                                await asyncio.sleep(3.0)
-                                # Now we can safely send our PubKey
+                                # BlueZ acceptor is aggressive. It shows PIN and sends PubKey NOW.
+                                # Trigger UI prompt immediately so user can start typing.
+                                session.trigger_auth_input()
+                                
+                                logger.info("START ACKed. Waiting for Peer Public Key in background...")
+                                # Give it some time to receive the PubKey segments
+                                await asyncio.sleep(2.0)
+                                
+                                # Now send our PubKey
                                 await pb_link.send_transaction(session.get_public_key_pdu())
                         else:
                             await pb_link.send_transaction(resp)
@@ -98,8 +104,19 @@ class MeshStack:
         await worker_task
 
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
+        """Resumes a provisioning session after the user provides a numeric PIN."""
         for link_id, session in self.provisioning_states.items():
             if session.state == ProvisioningState.AUTH_INPUT:
+                # SAFETY: Wait for Peer's Public Key if it hasn't arrived yet
+                wait_start = time.time()
+                while session.shared_secret is None:
+                    if time.time() - wait_start > 10.0:
+                        logger.error("Timed out waiting for Peer Public Key.")
+                        session.state = ProvisioningState.FAILED
+                        return
+                    await asyncio.sleep(0.5)
+                
+                logger.info("Peer Public Key available. Proceeding with Confirmation.")
                 session.set_auth_value(pin.to_bytes(16, 'big'))
                 confirm_pdu = session._send_confirm()
                 # Use create_task to avoid blocking the status check loop
