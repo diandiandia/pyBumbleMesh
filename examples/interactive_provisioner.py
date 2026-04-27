@@ -33,21 +33,6 @@ async def main():
             # 启动协议栈
             await stack.start()
 
-            # --- 强制手动开启扫描 (FORCED HCI SCAN) ---
-            from bumble.hci import HCI_LE_Set_Scan_Parameters_Command, HCI_LE_Set_Scan_Enable_Command
-            logger.info("FORCING HCI SCAN START...")
-            await device.host.send_command(HCI_LE_Set_Scan_Parameters_Command(
-                le_scan_type=1, # Active
-                le_scan_interval=0x0010,
-                le_scan_window=0x0010,
-                own_address_type=0,
-                scanning_filter_policy=0
-            ))
-            await device.host.send_command(HCI_LE_Set_Scan_Enable_Command(
-                le_scan_enable=1,
-                filter_duplicates=0
-            ))
-
             # 定时打印心跳，确认扫描器活着
             async def heartbeat():
                 while True:
