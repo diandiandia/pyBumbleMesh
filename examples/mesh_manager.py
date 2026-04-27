@@ -39,47 +39,64 @@ class MeshManager:
 
     async def show_menu(self):
         while True:
-            print("\n" + "="*40)
-            print("   Bluetooth Mesh 1.1 全功能管理终端")
-            print("="*40)
-            print(f" 当前目标: {f'0x{self.target_addr:04x}' if self.target_addr else '未设置'}")
-            print("-" * 40)
-            print(" 1. 扫描未配网设备 (Local Scan)")
-            print(" 2. 开始本地配网 (Local Provision)")
-            print(" 3. 远程扫描 (Remote Scan via node)")
-            print(" 4. 远程配网 (Remote Provision via node)")
-            print(" 5. 查看已配网节点 (Nodes)")
-            print(" 6. 锁定操作目标 (Target)")
-            print(" 7. 基础控制 - 开灯 (ON)")
-            print(" 8. 基础控制 - 关灯 (OFF)")
-            print(" 9. 查询当前状态 (Get Status)")
-            print(" 10. 退出 (Quit)")
-            print("-" * 40)
+            print("\n" + "="*45)
+            print("   Bluetooth Mesh 1.1 管理终端 (顺序引导模式)")
+            print("="*45)
+            print(f" [当前操作目标]: {f'0x{self.target_addr:04x}' if self.target_addr else '--- 未设置 ---'}")
+            print("-" * 45)
+            print(" --- 第一步：新设备入网 (Onboarding) ---")
+            print("  1. 扫描未配网设备 (Local Scan)")
+            print("  2. 执行本地配网 (Local Provision)")
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-10]: ")
+            print("\n --- 第二步：锁定与控制 (Control) ---")
+            print("  3. 查看已配网节点列表 (Nodes List)")
+            print("  4. 锁定操作目标地址 (Set Target)")
+            print("  5. 控制指令: 开灯 (ON)")
+            print("  6. 控制指令: 关灯 (OFF)")
+            print("  7. 查询实时状态 (Get Status)")
+
+            print("\n --- 第三步：远程扩展与维护 (Advanced) ---")
+            print("  8. 远程扫描 (通过当前目标节点进行)")
+            print("  9. 远程配网 (通过当前目标节点进行)")
+            print("  10. 手动触发配置 (Manual Re-Config Target)")
+            
+            print("\n --- 其他 ---")
+            print("  11. 退出 (Quit)")
+            print("-" * 45)
+            
+            choice = await asyncio.to_thread(input, "请选择操作 [1-11]: ")
             
             if choice == '1':
                 await self.scan_flow()
             elif choice == '2':
                 await self.provision_flow()
             elif choice == '3':
-                await self.remote_scan_flow()
-            elif choice == '4':
-                await self.remote_provision_flow()
-            elif choice == '5':
                 self.list_nodes()
-            elif choice == '6':
+            elif choice == '4':
                 await self.target_flow()
-            elif choice == '7':
+            elif choice == '5':
                 await self.control_onoff(True)
-            elif choice == '8':
+            elif choice == '6':
                 await self.control_onoff(False)
-            elif choice == '9':
+            elif choice == '7':
                 await self.get_status()
+            elif choice == '8':
+                await self.remote_scan_flow()
+            elif choice == '9':
+                await self.remote_provision_flow()
             elif choice == '10':
+                await self.manual_config_flow()
+            elif choice == '11':
                 break
             else:
                 print("无效选择")
+
+    async def manual_config_flow(self):
+        if not self.target_addr:
+            print("错误: 请先设置目标地址")
+            return
+        print(f"正在为 {self.target_addr:04x} 重新执行配置流...")
+        await self.stack.config_manager.configure_node(self.target_addr, 0, self.app_key)
 
     async def remote_scan_flow(self):
         if not self.target_addr:

@@ -34,9 +34,9 @@ class LowerTransportLayer:
             return segments
         else:
             # --- Control Messages (e.g. Segment ACK) ---
-            # BlueZ expects CTL=1 for Segment Acknowledgment
-            h0 = 0x80 | 0x00 # SEG=1, Opcode=0 (Segment ACK)
-            # Control messages are typically small and unsegmented or specifically formatted
+            # Unsegmented Control Message: SEG=0 (bit 7), Opcode in bits 0-6
+            # For Segment ACK, opcode is 0x00.
+            h0 = 0x00 | 0x00 # SEG=0, Opcode=0 (Segment ACK)
             return [bytes([h0]) + pdu]
 
     def create_segment_ack(self, seq_zero: int, block: int) -> bytes:
@@ -48,16 +48,15 @@ class LowerTransportLayer:
         h2 = (seq_zero & 0x3F) << 2
         return bytes([h1, h2]) + block.to_bytes(4, 'big')
 
-    def assemble_pdu(self, src: int, pdu: bytes) -> Optional[tuple]:
-        """Reassembles segments. Returns (Full_PDU, is_ctl, seq_zero, block_mask)."""
+    def assemble_pdu(self, src: int, pdu: bytes, seq: int = 0) -> Optional[tuple]:
+        """Reassembles segments. Returns (Full_PDU, is_ctl, seq_auth, block_mask)."""
         if len(pdu) < 1: return None
         
         is_segmented = (pdu[0] & 0x80) != 0
-        is_ctl = (pdu[0] & 0x7F) == 0x00 if not is_segmented else False # Simplified
-
+        
         if not is_segmented:
-            # (PDU, ctl, seq_zero, block)
-            return pdu[1:], 0, 0, 0
+            # Unsegmented: SeqAuth is just the current seq
+            return pdu[1:], (pdu[0] >> 6) & 1, seq, 0
         
         if len(pdu) < 4: return None
         h0, h1, h2, h3 = pdu[0:4]
@@ -65,9 +64,14 @@ class LowerTransportLayer:
         seg_o = ((h2 & 0x03) << 3) | (h3 >> 5)
         seg_n = h3 & 0x1F
         
+        # Calculate SeqAuth from current seq and seq_zero
+        seq_auth = (seq & 0xFFE000) | seq_zero
+        if (seq & 0x1FFF) < seq_zero:
+            seq_auth -= 0x2000
+            
         key = (src, seq_zero)
         if key not in self.rx_sessions:
-            self.rx_sessions[key] = {'total': seg_n + 1, 'parts': {}, 'block': 0}
+            self.rx_sessions[key] = {'total': seg_n + 1, 'parts': {}, 'block': 0, 'seq_auth': seq_auth}
             
         session = self.rx_sessions[key]
         session['parts'][seg_o] = pdu[4:]
@@ -75,8 +79,8 @@ class LowerTransportLayer:
         
         if len(session['parts']) == session['total']:
             full_pdu = b''.join(session['parts'][i] for i in range(session['total']))
+            final_seq_auth = session['seq_auth']
             del self.rx_sessions[key]
-            return full_pdu, 0, seq_zero, session['block']
+            return full_pdu, 0, final_seq_auth, session['block']
             
-        # Return progress for potential ACK sending
-        return None, 0, seq_zero, session['block']
+        return None, 0, seq_auth, session['block']

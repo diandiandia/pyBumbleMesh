@@ -18,6 +18,12 @@ class UpperTransportLayer:
     def add_dev_key(self, address: int, key: bytes):
         self.dev_keys[address] = key
 
+    def get_dev_key(self, address: int) -> bytes | None:
+        return self.dev_keys.get(address)
+
+    def get_app_key(self, index: int) -> bytes | None:
+        return self.app_keys.get(index)
+
     def _create_nonce(self, nonce_type: int, aszmic: int, seq: int, src: int, dst: int, iv_index: int) -> bytes:
         """
         Mesh Spec Nonce Construction.
@@ -37,7 +43,7 @@ class UpperTransportLayer:
                 iv_index.to_bytes(4, 'big')
         return nonce
 
-    def encrypt(self, src: int, dst: int, seq: int, iv_index: int, payload: bytes, key: bytes, akf: int) -> bytes:
+    def encrypt(self, src: int, dst: int, seq: int, iv_index: int, payload: bytes, key: bytes, akf: int, aid: int = 0) -> bytes:
         """
         Encrypts an Access PDU.
         akf=0: Use Device Nonce (0x02)

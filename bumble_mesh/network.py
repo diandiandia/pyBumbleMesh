@@ -67,12 +67,13 @@ class NetworkLayer:
         
         src = int.from_bytes(src_bytes, 'big')
         dst = int.from_bytes(dst_bytes, 'big')
+        seq = int.from_bytes(seq_bytes, 'big')
         
         nonce = bytes([0x01, ctl_ttl]) + seq_bytes + src_bytes + b'\x00\x00' + self.iv_index.to_bytes(4, 'big')
         
         mic_len = 8 if ctl else 4
         try:
             transport_pdu = aes_ccm_decrypt(self.encryption_key, nonce, encrypted_payload, b'', mic_len)
-            return src, dst, transport_pdu
+            return src, dst, seq, transport_pdu
         except Exception:
             return None

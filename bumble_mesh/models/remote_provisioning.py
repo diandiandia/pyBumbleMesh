@@ -17,13 +17,22 @@ class RemoteProvisioningClient(Model):
         self.register_handler(0x8052, self._handle_scan_report)
         self.register_handler(0x8056, self._handle_link_status)
         self.register_handler(0x8057, self._handle_link_report)
+        self.register_handler(0x8059, self._handle_pdu_outbound_report)
         self.register_handler(0x805A, self._handle_pdu_report)
 
         self.on_scan_report = None
         self.on_link_status = None
         self.on_pdu_report = None
+        self.on_pdu_outbound_report = None
 
     # --- Handlers for Responses ---
+
+    def _handle_pdu_outbound_report(self, src, payload):
+        # Outbound PDU Count(1)
+        count = payload[0]
+        logger.debug(f"Remote PDU Outbound Report from {src:04x}: Count={count}")
+        if self.on_pdu_outbound_report:
+            self.on_pdu_outbound_report(src, count)
 
     def _handle_scan_status(self, src, payload):
         status = payload[0]

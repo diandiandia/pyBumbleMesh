@@ -216,20 +216,27 @@ class MeshStack:
                 return
         result = self.network.decrypt_pdu(pdu)
         if not result: return
-        src, dst, transport_pdu_raw = result
-        res = self.transport.assemble_pdu(src, transport_pdu_raw)
+        src, dst, seq, transport_pdu_raw = result
+        res = self.transport.assemble_pdu(src, transport_pdu_raw, seq=seq)
         if not res: return
-        full_pdu, is_ctl, seq_zero, block = res
+        full_pdu, akf_or_ctl, seq_auth, block = res
+        
+        # If it was a segmented message, we MUST send a Segment ACK
         if transport_pdu_raw[0] & 0x80:
-            asyncio.create_task(self._send_control_message(src, self.transport.create_segment_ack(seq_zero, block)))
+            asyncio.create_task(self._send_control_message(src, self.transport.create_segment_ack(seq_auth & 0x1FFF, block)))
+        
         if not full_pdu: return 
-        access_pdu = self.upper_transport.decrypt(src, dst, self.network.seq, self.network.iv_index, full_pdu, akf=0, aid=0)
+        
+        # Decrypt based on AKF bit from the PDU
+        # Config messages (akf_or_ctl=0) use DevKey, others use AppKey
+        access_pdu = self.upper_transport.decrypt(src, dst, seq_auth, self.network.iv_index, full_pdu, akf=akf_or_ctl, aid=0)
         if access_pdu: self.access.handle_pdu(src, dst, 0, access_pdu)
 
     async def _send_control_message(self, dst: int, payload: bytes):
+        # Control messages (CTL=1) have a different MIC length and Nonce
         segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, payload, ctl=1)
         for seg in segments:
-            await self.bearer.send_pdu(self.network.encrypt_pdu(self.unicast_address, dst, seg), is_pb_adv=False)
+            await self.bearer.send_pdu(self.network.encrypt_pdu(self.unicast_address, dst, seg, ctl=1), is_pb_adv=False)
 
     async def send_model_message(self, dst: int, model, opcode: int, payload: bytes, app_key: bytes = None):
         self.storage.set_setting("seq", self.network.seq + 1)
