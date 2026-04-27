@@ -41,7 +41,6 @@ class AdvBearer:
                 advertising_filter_policy=0
             )
         )
-        # We start with advertising DISABLED to allow full scanning
         await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=0))
 
     def _on_advertisement(self, advertisement):
@@ -74,16 +73,16 @@ class AdvBearer:
             ad_type = 0x29 if is_pb_adv else 0x2A
             ad_data = bytes([len(pdu) + 1, ad_type]) + pdu
             
-            # --- "SHOTGUN" TRANSMIT PATTERN ---
-            # Pulse the advertisement then immediately return to scanning.
-            # This prevents the provisioner from being "deaf" while sending.
+            # --- "BURST" PATTERN ---
+            # Most Linux HCI controllers are deaf while advertising. 
+            # We must flash the PDU then immediately kill advertising.
             await self.device.host.send_command(HCI_LE_Set_Advertising_Data_Command(advertising_data=ad_data))
             await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=1))
             
-            # Hold for a short burst (Mesh segments are tiny, 40ms is plenty for 3 channels)
-            await asyncio.sleep(0.04)
+            # 25ms is just enough for a single burst on all 3 channels
+            await asyncio.sleep(0.025)
             
             await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=0))
             
-            # Safety gap before next command or next RX
+            # Cool down gap
             await asyncio.sleep(0.01)

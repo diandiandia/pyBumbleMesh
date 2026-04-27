@@ -86,41 +86,47 @@ async def main():
             print(f"\n开始为设备 {target_uuid.hex()} 进行配网...")
             provisioning_done = asyncio.Event()
             
-            # 劫持状态检查
-            original_handle_pdu = stack._on_bearer_pdu
-            
             async def check_provisioning_status():
-                while not provisioning_done.is_set():
-                    await asyncio.sleep(0.5)
-                    for link_id, s in stack.provisioning_states.items():
-                        if s.state == ProvisioningState.AUTH_INPUT:
-                            print("\n" + "!"*20)
-                            print("设备已激活！请查看 p1 (test-mesh) 屏幕显示的 PIN 码。")
-                            # Run blocking input in a separate thread to avoid freezing the stack
-                            pin_str = await asyncio.to_thread(input, "请输入该 PIN 码 (例如 123456): ")
-                            pin_str = pin_str.strip()
-                            try:
-                                pin = int(pin_str)
-                                await stack.resume_provisioning_with_pin(target_uuid, pin)
-                            except ValueError:
-                                print("错误：请输入纯数字 PIN 码")
-                        
-                        if s.state == ProvisioningState.COMPLETE:
-                            provisioning_done.set()
-                        elif s.state == ProvisioningState.FAILED:
-                            print("\n配网失败！请检查 AuthValue 是否正确或重试。")
-                            provisioning_done.set()
+                try:
+                    while not provisioning_done.is_set():
+                        await asyncio.sleep(0.5)
+                        for link_id, s in stack.provisioning_states.items():
+                            if s.state == ProvisioningState.AUTH_INPUT:
+                                print("\n" + "!"*20)
+                                print("设备已激活！请查看 p1 (test-mesh) 屏幕显示的 PIN 码。")
+                                # Run blocking input in a separate thread to avoid freezing the stack
+                                pin_str = await asyncio.to_thread(input, "请输入该 PIN 码 (例如 123456): ")
+                                pin_str = pin_str.strip()
+                                try:
+                                    pin = int(pin_str)
+                                    await stack.resume_provisioning_with_pin(target_uuid, pin)
+                                except ValueError:
+                                    print("错误：请输入纯数字 PIN 码")
+                            
+                            if s.state == ProvisioningState.COMPLETE:
+                                provisioning_done.set()
+                            elif s.state == ProvisioningState.FAILED:
+                                print("\n配网失败！请检查 AuthValue 是否正确或重试。")
+                                provisioning_done.set()
+                except asyncio.CancelledError:
+                    pass
 
-            asyncio.create_task(check_provisioning_status())
-            
-            await stack.provision_device(target_uuid)
+            # --- 并行启动任务 ---
+            check_task = asyncio.create_task(check_provisioning_status())
+            provision_task = asyncio.create_task(stack.provision_device(target_uuid))
             
             try:
                 print("正在进行安全握手 (交换公钥与身份验证)...")
+                # 等待事件完成，超时时间 60s
                 await asyncio.wait_for(provisioning_done.wait(), timeout=60.0)
                 print("配网流程结束。")
             except asyncio.TimeoutError:
-                print("配网超时。")
+                print("配网超时：在规定时间内未完成配网。")
+            finally:
+                # 确保清理后台任务
+                check_task.cancel()
+                provision_task.cancel()
+                await asyncio.gather(check_task, provision_task, return_exceptions=True)
 
             print("\n运行中，按 Ctrl+C 退出。")
             await asyncio.get_event_loop().create_future()

@@ -70,20 +70,20 @@ class MeshStack:
                 try:
                     if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE): break
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
+                    
                     if resp:
-                        if resp[0] == 0x02: # START
+                        # CASE: We just handled CAPABILITIES -> We need START + our PUBKEY
+                        if resp[0] == 0x02:
                             success = await pb_link.send_transaction(resp)
-                            if success and session.state != ProvisioningState.FAILED:
-                                # --- MANDATORY GAP FOR HALF-DUPLEX RADIOS ---
-                                # BlueZ acceptor sends its PubKey IMMEDIATELY after START.
-                                # We must stop our TX and just listen for at least 2 seconds.
-                                logger.info("START ACKed. Waiting for Peer Public Key (Listen-only mode)...")
-                                await asyncio.sleep(2.5)
-                                
-                                # Now send our PubKey
+                            if success:
+                                # BlueZ acceptor is aggressive. We MUST listen for its PubKey FIRST.
+                                logger.info("START ACKed. Entering 3s Listen-Only mode for Peer Public Key...")
+                                await asyncio.sleep(3.0)
+                                # Now we can safely send our PubKey
                                 await pb_link.send_transaction(session.get_public_key_pdu())
                         else:
                             await pb_link.send_transaction(resp)
+
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
                         self.storage.save_node(next_addr, uuid, session.shared_secret)
@@ -102,7 +102,8 @@ class MeshStack:
             if session.state == ProvisioningState.AUTH_INPUT:
                 session.set_auth_value(pin.to_bytes(16, 'big'))
                 confirm_pdu = session._send_confirm()
-                await self.provisioning_sessions[link_id].send_transaction(confirm_pdu)
+                # Use create_task to avoid blocking the status check loop
+                asyncio.create_task(self.provisioning_sessions[link_id].send_transaction(confirm_pdu))
                 break
 
     def _on_bearer_pdu(self, pdu: bytes):
