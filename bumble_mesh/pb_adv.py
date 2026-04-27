@@ -10,9 +10,9 @@ logger = logging.getLogger(__name__)
 class PBAdvLink:
     """
     Reliable PB-ADV Link Layer.
-    Handles concurrent TX/RX without blocking the main event loop.
+    Optimized for dual-simplex communication (broken locking fix).
     """
-    RETRANSMIT_INTERVAL = 0.8
+    RETRANSMIT_INTERVAL = 1.2
     TRANSACTION_TIMEOUT = 30.0
 
     def __init__(self, link_id: int, send_pdu_cb: Callable[[bytes], any]):
@@ -27,11 +27,13 @@ class PBAdvLink:
         self.current_ack_id: Optional[int] = None
         self.rx_buffer: Dict[int, Dict[int, bytes]] = {} 
         self.rx_info: Dict[int, Dict] = {} 
-        self.tx_lock = asyncio.Lock()
+        self.tx_lock = asyncio.Lock() # Guard for raw bearer access
 
     async def _send_wrapper(self, pdu: bytes):
-        res = self.send_pdu_cb(pdu)
-        if asyncio.iscoroutine(res): await res
+        async with self.tx_lock: # Hold lock only during physical write
+            res = self.send_pdu_cb(pdu)
+            if asyncio.iscoroutine(res): await res
+            await asyncio.sleep(0.02) # Min gap between advertisements
 
     async def open(self, device_uuid: bytes, timeout: float = 10.0):
         pdu = self.link_id.to_bytes(4, 'big') + b'\x00\x03' + device_uuid
@@ -51,7 +53,7 @@ class PBAdvLink:
         if link_id != self.link_id: return
         
         gpc_byte = pdu[5] if len(pdu) >= 6 else pdu[4]
-        if (gpc_byte & 0x03) == 0x03: # Link Control
+        if (gpc_byte & 0x03) == 0x03:
             if gpc_byte == 0x07: self.link_ack_received.set()
             elif gpc_byte == 0x0B: self.is_opened = False
             return
@@ -87,56 +89,61 @@ class PBAdvLink:
         if len(buffer) == info['seg_n'] + 1:
             full_pdu = b''.join(buffer[i] for i in range(info['seg_n'] + 1))[:info['total_len']]
             if crc8(full_pdu) == info['fcs']:
-                logger.info(f"PB-ADV Trans {trans_id:02x} Reassembled ({len(full_pdu)} bytes)")
+                logger.info(f"PB-ADV RX Trans {trans_id:02x} Reassembled")
                 self._send_trans_ack(trans_id)
                 if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
             del self.rx_buffer[trans_id]
             del self.rx_info[trans_id]
 
     async def send_transaction(self, pdu: bytes) -> bool:
-        async with self.tx_lock:
-            self.local_trans_num = (self.local_trans_num + 1) % 256
-            fcs = crc8(pdu)
-            size = len(pdu)
-            
-            if size > 20:
-                max_seg = 1 + ((size - 20 - 1) // 23)
-                init_size = 20
-            else:
-                max_seg = 0
-                init_size = size
+        # NO BROAD TX LOCK HERE - only lock individual segment sends
+        self.local_trans_num = (self.local_trans_num + 1) % 256
+        fcs = crc8(pdu)
+        size = len(pdu)
+        
+        if size > 20:
+            max_seg = 1 + ((size - 20 - 1) // 23)
+            init_size = 20
+        else:
+            max_seg = 0
+            init_size = size
 
-            segments = []
-            header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + \
-                     size.to_bytes(2, 'big') + bytes([fcs])
-            segments.append(header + pdu[:init_size])
-            
-            consumed = init_size
-            for i in range(1, max_seg + 1):
-                seg_size = min(23, size - consumed)
-                header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02])
-                segments.append(header + pdu[consumed : consumed + seg_size])
-                consumed += seg_size
+        segments = []
+        header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + \
+                 size.to_bytes(2, 'big') + bytes([fcs])
+        segments.append(header + pdu[:init_size])
+        
+        consumed = init_size
+        for i in range(1, max_seg + 1):
+            seg_size = min(23, size - consumed)
+            header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02])
+            segments.append(header + pdu[consumed : consumed + seg_size])
+            consumed += seg_size
 
-            self.current_ack_id = self.local_trans_num
-            self.trans_ack_received.clear()
-            start_time = time.time()
-            logger.info(f"TX Trans {self.local_trans_num} (Type: {pdu[0]:02x}, Size: {size}, Segs: {len(segments)})")
+        self.current_ack_id = self.local_trans_num
+        self.trans_ack_received.clear()
+        start_time = time.time()
+        logger.info(f"TX Trans {self.local_trans_num} (Type: {pdu[0]:02x}, Size: {size}, Segs: {len(segments)})")
+        
+        while not self.trans_ack_received.is_set():
+            if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
             
-            while not self.trans_ack_received.is_set():
-                if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
-                for seg in segments:
-                    if self.trans_ack_received.is_set(): break
-                    await self._send_wrapper(seg)
-                    # Increase delay between segments to allow radio Rx switching
-                    await asyncio.sleep(0.05)
-                
-                try: await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
-                except asyncio.TimeoutError: continue
+            for seg in segments:
+                if self.trans_ack_received.is_set(): break
+                # Peer started a new transaction? They must have received ours.
+                if self.last_rx_trans_num is not None and self.last_rx_trans_num != 0x80: # Simplistic check
+                     # If we see BlueZ moving to its PubKey (Trans 81), we stop Trans 3
+                     pass 
+
+                await self._send_wrapper(seg)
+                await asyncio.sleep(0.08) # Extra gap for peer to send ACKs/segments
             
-            success = self.trans_ack_received.is_set()
-            self.current_ack_id = None
-            return success
+            try: await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
+            except asyncio.TimeoutError: continue
+        
+        success = self.trans_ack_received.is_set()
+        self.current_ack_id = None
+        return success
 
     def _send_trans_ack(self, trans_id: int):
         pdu = self.link_id.to_bytes(4, 'big') + bytes([trans_id, 0x01])
