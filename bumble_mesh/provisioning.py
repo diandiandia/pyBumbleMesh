@@ -58,7 +58,8 @@ class ProvisioningSession:
         if len(auth_value) != 16:
             raise ValueError("AuthValue must be 16 bytes")
         self.auth_value = auth_value
-        if self.state == ProvisioningState.AUTH_INPUT:
+        # If we have shared_secret, we can move to CONFIRM. Otherwise wait for PubKey.
+        if self.shared_secret is not None:
             self.state = ProvisioningState.CONFIRM
 
     def handle_pdu(self, pdu: bytes, **kwargs) -> Optional[bytes]:
@@ -82,46 +83,20 @@ class ProvisioningSession:
         return None
 
     def _handle_capabilities(self, pdu: bytes) -> Optional[bytes]:
-        # Idempotency check: If we already processed capabilities, ignore duplicates
-        if self.state != ProvisioningState.INVITE:
-            return None
-
-        # pdu is [0x01, data(11)]
+        if self.state != ProvisioningState.INVITE: return None
         self.payload_capabilities = pdu[1:]
-        
-        # Capability Mapping (Strictly aligned with BlueZ 5.86 / Mesh v1.0)
-        # Mesh v1.0 Table 5.15:
-        # 0x03: Output Numeric  (Linked to Bit 3 in mask)
-        # 0x04: Output Alpha    (Linked to Bit 4 in mask)
         output_size = self.payload_capabilities[5]
-        # v1.0/v1.1 Specs both use Big Endian for multi-octet fields
         output_action_mask = int.from_bytes(self.payload_capabilities[6:8], 'big')
         
-        if output_size > 0:
-            if output_action_mask & 0x0008: # Bit 3: Output Numeric
-                logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
-                self.auth_method = 0x02 
-                self.auth_action = 0x03 # v1.0 Numeric Action is 3
-                self.auth_size = output_size
-            elif output_action_mask & 0x0010: # Bit 4: Output Alphanumeric
-                logger.info(f"Device supports OutputAlphanumeric OOB (Size: {output_size})")
-                self.auth_method = 0x02
-                self.auth_action = 0x04 # v1.0 Alpha Action is 4
-                self.auth_size = output_size
-            else:
-                logger.info("Device has Output OOB but no supported actions, falling back to No OOB")
-                self.auth_method = 0x00
-                self.auth_action = 0x00
-                self.auth_size = 0x00
+        if output_size > 0 and (output_action_mask & 0x0008):
+            logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
+            self.auth_method, self.auth_action = 0x02, 0x03 # v1.0 Digit
+            self.auth_size = output_size
         else:
             logger.info("Using No OOB authentication")
-            self.auth_method = 0x00
-            self.auth_action = 0x00
-            self.auth_size = 0x00
+            self.auth_method, self.auth_action, self.auth_size = 0, 0, 0
 
-        # Construct Start Payload (5 bytes)
         self.payload_start = bytes([0x00, 0x00, self.auth_method, self.auth_action, self.auth_size])
-        logger.info(f"Sending PROV_START: {self.payload_start.hex()} (Method={self.auth_method}, Action={self.auth_action}, Size={self.auth_size})")
         self.state = ProvisioningState.PUBLIC_KEY
         return b'\x02' + self.payload_start
 
@@ -129,46 +104,25 @@ class ProvisioningSession:
         self.payload_pubkey_p = self.local_key.x + self.local_key.y
         return b'\x03' + self.payload_pubkey_p
 
-    def trigger_auth_input(self):
-        """Forces state to AUTH_INPUT if using OOB, allowing parallel input and handshake."""
-        if self.auth_method != 0x00 and self.state != ProvisioningState.COMPLETE:
-            print("\n" + "*"*40)
-            print("!!! AUTHENTICATION REQUIRED !!!")
-            print("*"*40 + "\n")
-            logger.info("Transitioning to AUTH_INPUT to wait for PIN...")
-            self.state = ProvisioningState.AUTH_INPUT
-
     def _handle_public_key(self, pdu: bytes) -> Optional[bytes]:
-        # pdu is [0x03, X(32), Y(32)]
         self.payload_pubkey_device = pdu[1:]
         self.remote_public_key_x = pdu[1:33]
         self.remote_public_key_y = pdu[33:65]
-        
         self.shared_secret = self.local_key.dh(self.remote_public_key_x, self.remote_public_key_y)
         logger.info("Device Public Key received and Shared Secret calculated.")
         
-        # If we are already in AUTH_INPUT (waiting for PIN), stay there.
-        # If we were in PUBLIC_KEY, we might transition to CONFIRM if No OOB.
         if self.auth_method == 0x00:
             self.state = ProvisioningState.CONFIRM
             return self._send_confirm()
         
-        # If OOB is used, we remain in AUTH_INPUT (or transition to it if not already there)
-        self.state = ProvisioningState.AUTH_INPUT
+        # If OOB, we stay in current state (likely AUTH_INPUT) until PIN arrives
         return None
 
     def _send_confirm(self) -> bytes:
-        # Inputs = Invite(1) || Caps(11) || Start(5) || PubP(64) || PubD(64) = 145 bytes
         inputs = self.payload_invite + self.payload_capabilities + self.payload_start + \
                  self.payload_pubkey_p + self.payload_pubkey_device
-        
-        logger.debug(f"ConfirmationInputs: {inputs.hex()}")
         self.provisioning_salt = s1(inputs)
-        
-        # ConfirmationKey = k1(SharedSecret, ProvSalt, "prck")
         conf_key = k1(self.shared_secret, self.provisioning_salt, b"prck")
-        
-        # Confirm = AES-CMAC(ConfKey, RandomP || AuthValue)
         conf_p = aes_cmac(conf_key, self.provisioner_random + self.auth_value)
         return b'\x05' + conf_p
 
@@ -179,23 +133,15 @@ class ProvisioningSession:
 
     def _handle_random(self, pdu: bytes, net_key: bytes = b'\x01'*16, iv_index: int = 0, unicast_address: int = 0x0002) -> Optional[bytes]:
         self.device_random = pdu[1:]
-        
         conf_key = k1(self.shared_secret, self.provisioning_salt, b"prck")
         expected_confirm = aes_cmac(conf_key, self.device_random + self.auth_value)
-        
         if expected_confirm != self.device_confirmation:
-            logger.error(f"Confirmation Failed! Expected: {expected_confirm.hex()}, Got: {self.device_confirmation.hex()}")
+            logger.error("Confirmation Failed!")
             self.state = ProvisioningState.FAILED
             return None
-            
-        # Provisioning Data
         session_key = k1(self.shared_secret, self.provisioning_salt, b"prsk")
         session_nonce = k1(self.shared_secret, self.provisioning_salt, b"prsn")[3:16]
-        
-        # Data: NetKey(16) || Index(2) || Flags(1) || IV(4) || Addr(2) = 25 bytes
-        prov_data = net_key + b'\x00\x00' + b'\x00' + \
-                    iv_index.to_bytes(4, 'big') + unicast_address.to_bytes(2, 'big')
-        
+        prov_data = net_key + b'\x00\x00' + b'\x00' + iv_index.to_bytes(4, 'big') + unicast_address.to_bytes(2, 'big')
         encrypted_data = aes_ccm_encrypt(session_key, session_nonce, prov_data, b'', 8)
         self.state = ProvisioningState.COMPLETE
         return b'\x07' + encrypted_data

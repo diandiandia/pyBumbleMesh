@@ -40,7 +40,9 @@ class MeshStack:
         self.access = AccessLayer()
         self.provisioning_sessions = {} 
         self.provisioning_states = {} 
-        self.on_auth_needed = None
+        
+        # --- UI BROADCAST CALLBACK ---
+        self.on_auth_needed = None 
 
         self.bearer.on_pdu = self._on_bearer_pdu
         self.bearer.on_unprovisioned_device = self._on_unprovisioned_device
@@ -68,40 +70,38 @@ class MeshStack:
         pdu_queue = asyncio.Queue()
 
         async def pdu_worker():
-            auth_requested = False
             while True:
                 pdu = await pdu_queue.get()
                 try:
+                    if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE): break
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
                     
-                    # UI Broadcast
-                    if session.state == ProvisioningState.AUTH_INPUT and not auth_requested:
-                        auth_requested = True
-                        if self.on_auth_needed: asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
-
                     if resp:
-                        # CRITICAL: Send must be awaited if it's the final Data PDU (COMPLETE state)
                         async def send_task(p_to_send):
                             if p_to_send[0] == 0x02: # START
                                 success = await pb_link.send_transaction(p_to_send)
                                 if success:
-                                    logger.info("START ACKed. Entering 2s silence for peer Public Key...")
-                                    await asyncio.sleep(2.0)
+                                    # --- TRIGGER BROADCAST IMMEDIATELY AFTER START ---
+                                    if session.auth_method != 0x00:
+                                        session.state = ProvisioningState.AUTH_INPUT
+                                        if self.on_auth_needed:
+                                            asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
+                                    
+                                    # Silence window: Let BlueZ send its PubKey while we listen
+                                    logger.info("START confirmed. Listening for Peer Public Key (3s silence)...")
+                                    await asyncio.sleep(3.0)
                                     await pb_link.send_transaction(session.get_public_key_pdu())
                             else:
                                 await pb_link.send_transaction(p_to_send)
                         
-                        if session.state == ProvisioningState.COMPLETE:
-                            await send_task(resp) # Ensure final Data is sent
-                        else:
-                            asyncio.create_task(send_task(resp))
+                        if session.state == ProvisioningState.COMPLETE: await send_task(resp)
+                        else: asyncio.create_task(send_task(resp))
 
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
                         self.storage.save_node(next_addr, uuid, session.shared_secret)
                         self.upper_transport.add_dev_key(next_addr, session.shared_secret)
                         break
-                    if session.state == ProvisioningState.FAILED: break
                 except Exception as e: logger.error(f"Worker Error: {e}")
                 finally: pdu_queue.task_done()
 
@@ -112,13 +112,16 @@ class MeshStack:
 
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
         for link_id, session in self.provisioning_states.items():
-            if session.state in (ProvisioningState.AUTH_INPUT, ProvisioningState.PUBLIC_KEY):
+            if session.state == ProvisioningState.AUTH_INPUT:
+                # Security Gate: Ensure we have the peer's public key before proceeding
                 wait_start = time.time()
                 while session.shared_secret is None:
-                    if time.time() - wait_start > 20.0: return
+                    if time.time() - wait_start > 15.0:
+                        logger.error("Timed out waiting for Public Key reassembly.")
+                        return
                     await asyncio.sleep(0.5)
                 
-                logger.info("Public Key ready. Resuming with PIN.")
+                logger.info("Keys ready. Sending Confirmation.")
                 session.set_auth_value(pin.to_bytes(16, 'big'))
                 asyncio.create_task(self.provisioning_sessions[link_id].send_transaction(session._send_confirm()))
                 break
