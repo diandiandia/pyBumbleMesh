@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 
 class PBAdvLink:
     """
-    Reliable PB-ADV Link Layer.
-    Optimized for dual-simplex communication (broken locking fix).
+    Highly Robust PB-ADV Link Layer.
+    Optimized for Half-Duplex channel collision avoidance.
     """
-    RETRANSMIT_INTERVAL = 1.2
+    RETRANSMIT_INTERVAL = 1.5
     TRANSACTION_TIMEOUT = 30.0
 
     def __init__(self, link_id: int, send_pdu_cb: Callable[[bytes], any]):
@@ -27,13 +27,13 @@ class PBAdvLink:
         self.current_ack_id: Optional[int] = None
         self.rx_buffer: Dict[int, Dict[int, bytes]] = {} 
         self.rx_info: Dict[int, Dict] = {} 
-        self.tx_lock = asyncio.Lock() # Guard for raw bearer access
+        self.tx_lock = asyncio.Lock()
 
     async def _send_wrapper(self, pdu: bytes):
-        async with self.tx_lock: # Hold lock only during physical write
+        async with self.tx_lock:
             res = self.send_pdu_cb(pdu)
             if asyncio.iscoroutine(res): await res
-            await asyncio.sleep(0.02) # Min gap between advertisements
+            await asyncio.sleep(0.01) # Shortest hardware gap
 
     async def open(self, device_uuid: bytes, timeout: float = 10.0):
         pdu = self.link_id.to_bytes(4, 'big') + b'\x00\x03' + device_uuid
@@ -63,10 +63,17 @@ class PBAdvLink:
         is_start = (gpc_byte & 0x03) == 0x00
         is_cont = (gpc_byte & 0x03) == 0x02
 
+        # --- MANDATORY COLLISION AVOIDANCE ---
+        # If we see ANY inbound data (START or CONT) from the peer, 
+        # it implies they have received our previous transaction.
+        # We MUST stop our retransmits immediately to clear the channel.
+        if (is_start or is_cont) and trans_num != self.current_ack_id:
+            if self.current_ack_id is not None:
+                self.trans_ack_received.set()
+
         if is_ack and trans_num == self.current_ack_id:
             self.trans_ack_received.set()
-
-        if is_start:
+        elif is_start:
             if trans_num == self.last_rx_trans_num:
                 self._send_trans_ack(trans_num)
                 return
@@ -89,14 +96,13 @@ class PBAdvLink:
         if len(buffer) == info['seg_n'] + 1:
             full_pdu = b''.join(buffer[i] for i in range(info['seg_n'] + 1))[:info['total_len']]
             if crc8(full_pdu) == info['fcs']:
-                logger.info(f"PB-ADV RX Trans {trans_id:02x} Reassembled")
+                logger.info(f"PB-ADV Trans {trans_id:02x} Reassembled ({len(full_pdu)} bytes)")
                 self._send_trans_ack(trans_id)
                 if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
             del self.rx_buffer[trans_id]
             del self.rx_info[trans_id]
 
     async def send_transaction(self, pdu: bytes) -> bool:
-        # NO BROAD TX LOCK HERE - only lock individual segment sends
         self.local_trans_num = (self.local_trans_num + 1) % 256
         fcs = crc8(pdu)
         size = len(pdu)
@@ -130,13 +136,9 @@ class PBAdvLink:
             
             for seg in segments:
                 if self.trans_ack_received.is_set(): break
-                # Peer started a new transaction? They must have received ours.
-                if self.last_rx_trans_num is not None and self.last_rx_trans_num != 0x80: # Simplistic check
-                     # If we see BlueZ moving to its PubKey (Trans 81), we stop Trans 3
-                     pass 
-
                 await self._send_wrapper(seg)
-                await asyncio.sleep(0.08) # Extra gap for peer to send ACKs/segments
+                # Significant delay between segments to allow peer to interject and radio to listen
+                await asyncio.sleep(0.12) 
             
             try: await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
             except asyncio.TimeoutError: continue
