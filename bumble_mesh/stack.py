@@ -1,5 +1,5 @@
-import logging
 import asyncio
+import logging
 import random
 from .bearer import AdvBearer
 from .network import NetworkLayer
@@ -74,7 +74,13 @@ class MeshStack:
                         if resp[0] == 0x02: # START
                             success = await pb_link.send_transaction(resp)
                             if success and session.state != ProvisioningState.FAILED:
-                                await asyncio.sleep(0.5) # Wait for BlueZ acceptor
+                                # --- MANDATORY GAP FOR HALF-DUPLEX RADIOS ---
+                                # BlueZ acceptor sends its PubKey IMMEDIATELY after START.
+                                # We must stop our TX and just listen for at least 2 seconds.
+                                logger.info("START ACKed. Waiting for Peer Public Key (Listen-only mode)...")
+                                await asyncio.sleep(2.5)
+                                
+                                # Now send our PubKey
                                 await pb_link.send_transaction(session.get_public_key_pdu())
                         else:
                             await pb_link.send_transaction(resp)
@@ -109,31 +115,18 @@ class MeshStack:
         result = self.network.decrypt_pdu(pdu)
         if not result: return
         src, dst, transport_pdu_raw = result
-        
-        # 2. Lower Transport Handle (with Segment ACK logic)
         res = self.transport.assemble_pdu(src, transport_pdu_raw)
         if not res: return
-        
         full_transport_pdu, is_ctl, seq_zero, block_mask = res
-        
-        # --- BLUEZ ALIGNMENT: Auto-reply Segment ACKs ---
-        if transport_pdu_raw[0] & 0x80: # If it was a segmented message
+        if transport_pdu_raw[0] & 0x80:
             ack_payload = self.transport.create_segment_ack(seq_zero, block_mask)
             asyncio.create_task(self._send_control_message(src, ack_payload))
-
-        if not full_transport_pdu: return # Still waiting for more segments
-
-        # 3. Upper Transport Decrypt
-        access_pdu = self.upper_transport.decrypt(
-            src, dst, self.network.seq, self.network.iv_index, full_transport_pdu, akf=0, aid=0
-        )
+        if not full_transport_pdu: return 
+        access_pdu = self.upper_transport.decrypt(src, dst, self.network.seq, self.network.iv_index, full_transport_pdu, akf=0, aid=0)
         if not access_pdu: return
-            
-        # 4. Access Handle
         self.access.handle_pdu(src, dst, 0, access_pdu)
 
     async def _send_control_message(self, dst: int, payload: bytes):
-        """Sends a CTL=1 message (Segment ACK)."""
         segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, payload, ctl=1)
         for segment in segments:
             network_pdu = self.network.encrypt_pdu(self.unicast_address, dst, segment)
@@ -142,8 +135,6 @@ class MeshStack:
     async def send_model_message(self, dst: int, model, opcode: int, payload: bytes, app_key: bytes = None):
         self.storage.set_setting("seq", self.network.seq + 1)
         access_pdu = self._create_access_pdu(opcode, payload)
-        
-        # Configuration Model MUST use DevKey and AKF=0
         if model.MODEL_ID == 0x0001:
             key = self.upper_transport.get_dev_key(dst) or b'\x00'*16
             akf = 0
@@ -151,8 +142,7 @@ class MeshStack:
         else:
             key = app_key or b'\x00' * 16 
             akf = 1 if app_key else 0
-            aid = 0 # Simple AID
-            
+            aid = 0 
         encrypted_pdu = self.upper_transport.encrypt(self.unicast_address, dst, self.network.seq, self.network.iv_index, access_pdu, key, akf, aid)
         segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, encrypted_pdu, akf, aid)
         for segment in segments:
