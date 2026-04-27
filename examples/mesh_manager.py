@@ -44,36 +44,82 @@ class MeshManager:
             print("="*40)
             print(f" 当前目标: {f'0x{self.target_addr:04x}' if self.target_addr else '未设置'}")
             print("-" * 40)
-            print(" 1. 扫描未配网设备 (Scan)")
-            print(" 2. 开始配网流程 (Provision)")
-            print(" 3. 查看已配网节点 (Nodes)")
-            print(" 4. 锁定操作目标 (Target)")
-            print(" 5. 基础控制 - 开灯 (ON)")
-            print(" 6. 基础控制 - 关灯 (OFF)")
-            print(" 7. 查询当前状态 (Get Status)")
-            print(" 8. 退出 (Quit)")
+            print(" 1. 扫描未配网设备 (Local Scan)")
+            print(" 2. 开始本地配网 (Local Provision)")
+            print(" 3. 远程扫描 (Remote Scan via node)")
+            print(" 4. 远程配网 (Remote Provision via node)")
+            print(" 5. 查看已配网节点 (Nodes)")
+            print(" 6. 锁定操作目标 (Target)")
+            print(" 7. 基础控制 - 开灯 (ON)")
+            print(" 8. 基础控制 - 关灯 (OFF)")
+            print(" 9. 查询当前状态 (Get Status)")
+            print(" 10. 退出 (Quit)")
             print("-" * 40)
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-8]: ")
+            choice = await asyncio.to_thread(input, "请选择操作 [1-10]: ")
             
             if choice == '1':
                 await self.scan_flow()
             elif choice == '2':
                 await self.provision_flow()
             elif choice == '3':
-                self.list_nodes()
+                await self.remote_scan_flow()
             elif choice == '4':
-                await self.target_flow()
+                await self.remote_provision_flow()
             elif choice == '5':
-                await self.control_onoff(True)
+                self.list_nodes()
             elif choice == '6':
-                await self.control_onoff(False)
+                await self.target_flow()
             elif choice == '7':
-                await self.get_status()
+                await self.control_onoff(True)
             elif choice == '8':
+                await self.control_onoff(False)
+            elif choice == '9':
+                await self.get_status()
+            elif choice == '10':
                 break
             else:
                 print("无效选择")
+
+    async def remote_scan_flow(self):
+        if not self.target_addr:
+            print("错误: 请先设置目标地址（充当中继的节点）")
+            return
+        
+        self.scanned_devices.clear()
+        print(f"\n指令已下发，正在通过 {self.target_addr:04x} 进行远程扫描...")
+        
+        def on_remote_report(src, uuid, rssi, oob):
+            uid_hex = uuid.hex()
+            if uid_hex not in self.scanned_devices:
+                self.scanned_devices[uid_hex] = {'uuid': uuid, 'rssi': rssi}
+                print(f" [发现远端设备] UUID: {uid_hex} | RSSI: {rssi}dBm")
+
+        self.stack.rp_client.on_scan_report = on_remote_report
+        opcode, payload = self.stack.rp_client.scan_start(timeout=10)
+        await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload)
+        await asyncio.sleep(10.0)
+        print("\n远程扫描结束。")
+
+    async def remote_provision_flow(self):
+        if not self.target_addr:
+            print("错误: 请先设置目标地址（中继节点）")
+            return
+        if not self.scanned_devices:
+            print("错误: 请先执行远程扫描")
+            return
+
+        idx_str = await asyncio.to_thread(input, "选择要配网的远端设备编号: ")
+        try:
+            idx = int(idx_str)
+            uuid_hex = list(self.scanned_devices.keys())[idx]
+            uuid_bytes = self.scanned_devices[uuid_hex]['uuid']
+            
+            print(f"\n正在通过 {self.target_addr:04x} 启动远程配网: {uuid_hex}...")
+            await self.stack.remote_provision_device(self.target_addr, uuid_bytes)
+            print("\n[提示] 远程配网已结束，请检查 Nodes 列表。")
+        except (ValueError, IndexError, Exception) as e:
+            print(f"操作失败: {e}")
 
     async def scan_flow(self):
         self.scanned_devices.clear()

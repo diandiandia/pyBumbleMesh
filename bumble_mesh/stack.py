@@ -11,6 +11,8 @@ from .provisioning import ProvisioningSession, ProvisioningState
 from .config_manager import MeshConfigManager
 from .models.config import ConfigClient
 from .models.generic_onoff import GenericOnOffClient
+from .models.remote_provisioning import RemoteProvisioningClient
+from .pb_remote import PBRemoteLink
 from .upper_transport import UpperTransportLayer
 from .storage import MeshStorage
 
@@ -49,13 +51,57 @@ class MeshStack:
         # --- REGISTER MODELS ---
         self.config_client = self.config_manager.config_client # Re-use from manager
         self.onoff_client = GenericOnOffClient()
+        self.rp_client = RemoteProvisioningClient()
         self.access.register_model(self.onoff_client)
+        self.access.register_model(self.rp_client)
         
-        # --- UI BROADCAST CALLBACK ---
-        self.on_auth_needed = None 
+        self.provisioning_sessions = {} 
+        self.provisioning_states = {} 
 
-        self.bearer.on_pdu = self._on_bearer_pdu
-        self.bearer.on_unprovisioned_device = self._on_unprovisioned_device
+    async def remote_provision_device(self, server_addr: int, uuid: bytes):
+        """Provisions a device via a Remote Provisioning Server node."""
+        nodes = self.storage.get_nodes()
+        next_addr = self.unicast_address + 1
+        if nodes: next_addr = max(n['address'] for n in nodes) + 1
+            
+        # Create a Remote Tunnel Link instead of PB-ADV
+        pb_link = PBRemoteLink(self, server_addr, self.rp_client)
+        link_id = random.getrandbits(32) # For internal tracking
+        self.provisioning_sessions[link_id] = pb_link
+        
+        success = await pb_link.open(uuid)
+        if not success: return
+        
+        session = ProvisioningSession()
+        self.provisioning_states[link_id] = session
+        
+        pdu_queue = asyncio.Queue()
+
+        async def pdu_worker():
+            while True:
+                pdu = await pdu_queue.get()
+                try:
+                    if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE): break
+                    resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
+                    
+                    if resp:
+                        await pb_link.send_transaction(resp)
+
+                    if session.state == ProvisioningState.COMPLETE:
+                        logger.info(f"Remote Provisioning Successful! Node Address: {next_addr:04x}")
+                        self.storage.save_node(next_addr, uuid, session.shared_secret)
+                        self.upper_transport.add_dev_key(next_addr, session.shared_secret)
+                        asyncio.create_task(self.config_manager.configure_node(next_addr, 0, b'\x02'*16))
+                        break
+                except Exception as e: logger.error(f"Remote Worker Error: {e}")
+                finally: pdu_queue.task_done()
+
+        worker_task = asyncio.create_task(pdu_worker())
+        pb_link.on_provisioning_pdu = lambda pdu: pdu_queue.put_nowait(pdu)
+        
+        # Start by sending INVITE
+        await pb_link.send_transaction(session.invite())
+        await worker_task
 
     async def start(self):
         await self.bearer.start()
