@@ -18,6 +18,7 @@ class PBAdvLink:
         self.link_id = link_id
         self.send_pdu_cb = send_pdu_cb 
         self.local_trans_num = 0x00
+        self.last_rx_trans_num: Optional[int] = None # Track last received trans to detect new ones
         self.on_provisioning_pdu: Optional[Callable[[bytes], None]] = None
         self.is_opened = False
         self.link_ack_received = asyncio.Event()
@@ -45,6 +46,7 @@ class PBAdvLink:
             except asyncio.TimeoutError: continue
         self.is_opened = True
         self.local_trans_num = 0x00
+        self.last_rx_trans_num = None
         logger.info("PB-ADV Link Opened.")
 
     def handle_pdu(self, pdu: bytes):
@@ -60,22 +62,30 @@ class PBAdvLink:
 
         trans_num = pdu[4]
         
-        # --- AGGRESSIVE PREEMPTIVE STOP ---
-        # Stop our retransmits if we see ANY new activity from peer.
+        # --- REFINED PREEMPTIVE STOP ---
+        # Only stop our transmit if we receive a NEW transaction START or an explicit ACK.
         is_ack = (gpc_byte & 0x03) == 0x01
-        if not (is_ack and trans_num == self.current_ack_id):
+        is_start = (gpc_byte & 0x03) == 0x00
+        
+        if is_ack and trans_num == self.current_ack_id:
+            self.trans_ack_received.set()
+        elif is_start and trans_num != self.last_rx_trans_num:
+            # It's a new inbound transaction, peer must have received our last one.
             if self.current_ack_id is not None:
                 self.trans_ack_received.set()
 
-        if is_ack:
-            if trans_num == self.current_ack_id: self.trans_ack_received.set()
-        elif (gpc_byte & 0x03) == 0x00: # START
+        if is_start: # START
+            if trans_num == self.last_rx_trans_num:
+                self._send_trans_ack(trans_num) # Re-ACK duplicates to stop peer retransmits
+                return
+            
+            self.last_rx_trans_num = trans_num
             seg_n = gpc_byte >> 2
             total_len = int.from_bytes(pdu[6:8], 'big')
             fcs = pdu[8]
             self.rx_buffer[trans_num] = {0: pdu[9:]}
             self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
-            self._send_trans_ack(trans_num) # BlueZ needs ACK to stop sending START
+            self._send_trans_ack(trans_num)
             self._check_and_reassemble(trans_num)
         elif (gpc_byte & 0x03) == 0x02: # CONT
             if trans_num in self.rx_buffer:

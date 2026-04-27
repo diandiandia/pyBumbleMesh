@@ -123,6 +123,7 @@ class MeshStack:
         Starts a Remote Provisioning process through a relay server.
         """
         # 1. Find the Remote Provisioning Client model
+        from .models.remote_provisioning import RemoteProvisioningClient
         rp_client = next((m for m in self.access.models.values() if isinstance(m, RemoteProvisioningClient)), None)
         if not rp_client:
             logger.error("Remote Provisioning Client model not registered.")
@@ -150,6 +151,7 @@ class MeshStack:
                     await self.send_model_message(server_addr, rp_client, opcode, payload)
                     
                     if resp[0] == 0x02: # If START, follow with PUBKEY
+                        await asyncio.sleep(0.1) # Safety delay
                         outbound_count = (outbound_count + 1) & 0xFF
                         opcode, payload = rp_client.pdu_send(outbound_count, session.get_public_key_pdu())
                         await self.send_model_message(server_addr, rp_client, opcode, payload)
