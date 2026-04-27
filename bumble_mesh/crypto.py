@@ -8,40 +8,32 @@ ZERO = b'\x00' * 16
 
 def aes_cmac(key: bytes, msg: bytes) -> bytes:
     """
-    Wrapper for Bumble's aes_cmac to ensure standard (key, msg) order.
-    Bumble's version is actually aes_cmac(message, key).
+    Standard AES-CMAC.
+    Order: (Key, Message)
+    Note: Bumble uses (Message, Key), we wrap it.
     """
     if len(key) != 16:
-        # In Mesh, if key is longer (e.g. ECDH secret), we use it as message 
-        # or follow specific derivation. But aes_cmac MUST have 16-byte key.
         raise ValueError(f"AES-CMAC requires 16-byte key, got {len(key)}")
     return bumble_aes_cmac(msg, key)
 
 def s1(m: bytes) -> bytes:
-    """Salt generation function s1. salt = AES-CMAC(ZERO, M)"""
+    """salt = AES-CMAC(ZERO, M)"""
     return aes_cmac(ZERO, m)
 
 def k1(n: bytes, salt: bytes, p: bytes) -> bytes:
     """
-    Key derivation function k1.
-    k1(N, salt, P) = AES-CMAC(T, P) where T = AES-CMAC(salt, N)
+    T = AES-CMAC(salt, N)
+    k1 = AES-CMAC(T, P)
     """
-    # N (shared secret) can be 32 bytes, but 'salt' (from s1) is always 16 bytes.
     t = aes_cmac(salt, n)
     return aes_cmac(t, p)
 
 def k2(n: bytes, p: bytes) -> Tuple[int, bytes, bytes]:
-    """
-    Key derivation function k2.
-    k2(N, P) = (NID, EncryptionKey, PrivacyKey)
-    """
     salt = s1(b'smk2')
     t = aes_cmac(salt, n)
-    
     t1 = aes_cmac(t, p + b'\x01')
     t2 = aes_cmac(t, t1 + p + b'\x02')
     t3 = aes_cmac(t, t2 + p + b'\x03')
-    
     return t1[15] & 0x7F, t2, t3
 
 def aes_ccm_encrypt(key, nonce, plaintext, aad, mic_len):
@@ -75,3 +67,6 @@ def crc8(data: bytes) -> int:
     for byte in data:
         fcs = CRC_TABLE[fcs ^ byte]
     return (0xFF - fcs) & 0xFF
+
+res = crc8(b'\x00\x00')
+print(f"BlueZ FCS Engine: 00 00 -> {res:02x}")
