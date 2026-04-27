@@ -78,15 +78,6 @@ async def main():
                     target_uuid, _, _ = discovered_devices[idx]
                 
                 print(f"目标 UUID: {target_uuid.hex()}")
-                auth_str = input("请输入 AuthValue (16字节十六进制，pi1若未显示则直接回车): ").strip()
-                try:
-                    auth_value = bytes.fromhex(auth_str) if auth_str else b'\x00' * 16
-                    if len(auth_value) != 16:
-                        print("错误：AuthValue 必须是 16 字节（32个十六进制字符）")
-                        return
-                except ValueError:
-                    print("错误：请输入有效的十六进制字符串")
-                    return
             except (ValueError, IndexError):
                 print("无效的选择。")
                 return

@@ -113,10 +113,6 @@ class MeshStack:
                 pb_link = self.provisioning_sessions[link_id]
                 await pb_link.send_transaction(confirm_pdu)
                 break
-        
-        # Start the flow
-        invite_pdu = session.invite()
-        await pb_link.send_transaction(invite_pdu)
 
     async def remote_provision_device(self, server_addr: int, device_uuid: bytes):
         """
