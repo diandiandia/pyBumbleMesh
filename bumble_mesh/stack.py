@@ -73,32 +73,42 @@ class MeshStack:
             session.set_auth_value(auth_value)
         self.provisioning_states[link_id] = session
         
-        def on_pdu(pdu):
-            async def handle():
-                resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
-                if resp:
-                    await pb_link.send_transaction(resp)
-                    
-                    # If we just sent PROV_START, we must immediately follow with PUBLIC_KEY
-                    if resp[0] == 0x02:
-                        pub_key_pdu = session.get_public_key_pdu()
-                        await pb_link.send_transaction(pub_key_pdu)
-                
-                # Special Check: If session enters AUTH_INPUT, it won't return a response yet.
-                # The interactive script will detect this state and call set_auth_value.
-                # Once set_auth_value is called, we must manually trigger the next step (Confirm).
-                
-                if session.state == ProvisioningState.COMPLETE:
-                    logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
-                    self.storage.save_node(next_addr, uuid, session.shared_secret)
-                    self.upper_transport.add_dev_key(next_addr, session.shared_secret)
-            asyncio.create_task(handle())
-        
-        pb_link.on_provisioning_pdu = on_pdu
+        # --- SEQUENTIAL PDU PROCESSING QUEUE ---
+        pdu_queue = asyncio.Queue()
 
-        # --- RESTORED: Start the flow by sending Invite ---
+        async def pdu_worker():
+            while True:
+                pdu = await pdu_queue.get()
+                try:
+                    resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
+                    if resp:
+                        await pb_link.send_transaction(resp)
+                        
+                        # Sequential follow-up: If START was sent, follow with PUBKEY after a small gap
+                        if resp[0] == 0x02:
+                            await asyncio.sleep(0.1)
+                            pub_key_pdu = session.get_public_key_pdu()
+                            await pb_link.send_transaction(pub_key_pdu)
+                    
+                    if session.state == ProvisioningState.COMPLETE:
+                        logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
+                        self.storage.save_node(next_addr, uuid, session.shared_secret)
+                        self.upper_transport.add_dev_key(next_addr, session.shared_secret)
+                        break
+                except Exception as e:
+                    logger.error(f"Error in PDU worker: {e}")
+                finally:
+                    pdu_queue.task_done()
+
+        worker_task = asyncio.create_task(pdu_worker())
+        pb_link.on_provisioning_pdu = lambda pdu: pdu_queue.put_nowait(pdu)
+
+        # Start the flow
         invite_pdu = session.invite()
         await pb_link.send_transaction(invite_pdu)
+        
+        # Keep worker alive until done
+        await worker_task
 
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
         """Resumes a provisioning session after the user provides a numeric PIN."""
