@@ -42,7 +42,7 @@ class MeshStack:
         self.provisioning_states = {} 
         
         # --- UI CALLBACKS (Your Broadcast System) ---
-        self.on_auth_needed = None # Signature: callback(uuid, method)
+        self.on_auth_needed = None # callback(uuid, method)
 
         self.bearer.on_pdu = self._on_bearer_pdu
         self.bearer.on_unprovisioned_device = self._on_unprovisioned_device
@@ -70,59 +70,51 @@ class MeshStack:
         pdu_queue = asyncio.Queue()
 
         async def pdu_worker():
-            auth_requested = False
+            """
+            ULTRA-LEAN WORKER: Processes the queue without blocking on network TX.
+            """
             while True:
                 pdu = await pdu_queue.get()
                 try:
                     if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE): break
-                    
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
-                    
-                    # Check if we need to "Broadcast" an auth request
-                    if session.state == ProvisioningState.AUTH_INPUT and not auth_requested:
-                        auth_requested = True
-                        if self.on_auth_needed:
-                            asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
-
                     if resp:
+                        # LAUNCH NON-BLOCKING SENDER
                         async def send_task(p_to_send):
                             if p_to_send[0] == 0x02: # START
                                 success = await pb_link.send_transaction(p_to_send)
                                 if success:
-                                    # Provisioner sends its Public Key FIRST (Spec 5.4.1.2)
+                                    # BlueZ now shows the PIN. Trigger the UI "Broadcast" immediately.
+                                    if session.auth_method != 0x00 and self.on_auth_needed:
+                                        asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
+                                    
+                                    # Listen-then-talk: Pause for 3s to let peer finish its PubKey TX
+                                    logger.info("START ACKed. Entering 3s Listening window...")
+                                    await asyncio.sleep(3.0)
                                     await pb_link.send_transaction(session.get_public_key_pdu())
                             else:
                                 await pb_link.send_transaction(p_to_send)
                         
                         asyncio.create_task(send_task(resp))
-
-                    if session.state == ProvisioningState.COMPLETE:
-                        logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
-                        self.storage.save_node(next_addr, uuid, session.shared_secret)
-                        self.upper_transport.add_dev_key(next_addr, session.shared_secret)
-                        break
-                except Exception as e: logger.error(f"Error in PDU worker: {e}")
+                except Exception as e: logger.error(f"Worker Error: {e}")
                 finally: pdu_queue.task_done()
 
         worker_task = asyncio.create_task(pdu_worker())
         pb_link.on_provisioning_pdu = lambda pdu: pdu_queue.put_nowait(pdu)
-        
         asyncio.create_task(pb_link.send_transaction(session.invite()))
         await worker_task
 
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
         for link_id, session in self.provisioning_states.items():
-            if session.state == ProvisioningState.AUTH_INPUT:
-                # Wait for Peer's Public Key
+            if session.state in (ProvisioningState.AUTH_INPUT, ProvisioningState.PUBLIC_KEY):
                 wait_start = time.time()
                 while session.shared_secret is None:
-                    if time.time() - wait_start > 15.0:
-                        logger.error("Timed out waiting for Peer Public Key.")
-                        session.state = ProvisioningState.FAILED
+                    if time.time() - wait_start > 20.0:
+                        logger.error("Timed out waiting for Public Key.")
                         return
-                    await asyncio.sleep(0.2)
+                    await asyncio.sleep(0.5)
                 
-                logger.info("Peer Public Key received. Resuming with PIN.")
+                logger.info("Public Key ready. Sending Confirmation.")
                 session.set_auth_value(pin.to_bytes(16, 'big'))
                 asyncio.create_task(self.provisioning_sessions[link_id].send_transaction(session._send_confirm()))
                 break
@@ -138,37 +130,31 @@ class MeshStack:
         src, dst, transport_pdu_raw = result
         res = self.transport.assemble_pdu(src, transport_pdu_raw)
         if not res: return
-        full_transport_pdu, is_ctl, seq_zero, block_mask = res
+        full_pdu, is_ctl, seq_zero, block = res
         if transport_pdu_raw[0] & 0x80:
-            ack_payload = self.transport.create_segment_ack(seq_zero, block_mask)
-            asyncio.create_task(self._send_control_message(src, ack_payload))
-        if not full_transport_pdu: return 
-        access_pdu = self.upper_transport.decrypt(src, dst, self.network.seq, self.network.iv_index, full_transport_pdu, akf=0, aid=0)
-        if not access_pdu: return
-        self.access.handle_pdu(src, dst, 0, access_pdu)
+            asyncio.create_task(self._send_control_message(src, self.transport.create_segment_ack(seq_zero, block)))
+        if not full_pdu: return 
+        access_pdu = self.upper_transport.decrypt(src, dst, self.network.seq, self.network.iv_index, full_pdu, akf=0, aid=0)
+        if access_pdu: self.access.handle_pdu(src, dst, 0, access_pdu)
 
     async def _send_control_message(self, dst: int, payload: bytes):
         segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, payload, ctl=1)
-        for segment in segments:
-            network_pdu = self.network.encrypt_pdu(self.unicast_address, dst, segment)
-            await self.bearer.send_pdu(network_pdu, is_pb_adv=False)
+        for seg in segments:
+            await self.bearer.send_pdu(self.network.encrypt_pdu(self.unicast_address, dst, seg), is_pb_adv=False)
 
     async def send_model_message(self, dst: int, model, opcode: int, payload: bytes, app_key: bytes = None):
         self.storage.set_setting("seq", self.network.seq + 1)
         access_pdu = self._create_access_pdu(opcode, payload)
         if model.MODEL_ID == 0x0001:
             key = self.upper_transport.get_dev_key(dst) or b'\x00'*16
-            akf = 0
-            aid = 0
+            akf, aid = 0, 0
         else:
-            key = app_key or b'\x00' * 16 
-            akf = 1 if app_key else 0
-            aid = 0 
-        encrypted_pdu = self.upper_transport.encrypt(self.unicast_address, dst, self.network.seq, self.network.iv_index, access_pdu, key, akf, aid)
-        segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, encrypted_pdu, akf, aid)
-        for segment in segments:
-            network_pdu = self.network.encrypt_pdu(self.unicast_address, dst, segment)
-            await self.bearer.send_pdu(network_pdu, is_pb_adv=False)
+            key = app_key or b'\x00'*16
+            akf, aid = 1 if app_key else 0, 0
+        encrypted = self.upper_transport.encrypt(self.unicast_address, dst, self.network.seq, self.network.iv_index, access_pdu, key, akf, aid)
+        segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, encrypted, akf, aid)
+        for seg in segments:
+            await self.bearer.send_pdu(self.network.encrypt_pdu(self.unicast_address, dst, seg), is_pb_adv=False)
 
     def _create_access_pdu(self, opcode: int, payload: bytes) -> bytes:
         if opcode < 0x80: return bytes([opcode]) + payload

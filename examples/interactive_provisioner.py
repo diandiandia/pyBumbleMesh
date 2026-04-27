@@ -88,12 +88,65 @@ async def main():
             
             # --- 注册 UI 广播回调 (你的建议方案) ---
             async def on_auth_request(uuid, method):
+                print("\n" + "*"*40)
+                print("!!! AUTHENTICATION REQUIRED !!!")
+                print(f"设备 UUID: {uuid.hex()}")
+                print("请查看 p1 (test-mesh) 屏幕显示的 PIN 码。")
+                print("*"*40 + "\n")
+                
+                # 在独立线程接收输入，避免阻塞协议栈
+                pin_str = await asyncio.to_thread(input, "请输入该 PIN 码 (例如 123456): ")
+                try:
+                    pin = int(pin_str.strip())
+                    print("\n[UI] 正在将 PIN 码送回协议栈，计算加密验证值...")
+                    await stack.resume_provisioning_with_pin(uuid, pin)
+                except ValueError:
+                    print("错误：请输入纯数字 PIN 码")
+
+            stack.on_auth_needed = on_auth_request
+
+            # 状态监控任务（仅负责完成/失败判断）
+            async def monitor_status():
+                try:
+                    while not provisioning_done.is_set():
+                        await asyncio.sleep(0.5)
+                        for s in stack.provisioning_states.values():
+                            if s.state == ProvisioningState.COMPLETE:
+                                provisioning_done.set()
+                            elif s.state == ProvisioningState.FAILED:
+                                print("\n配网失败！")
+                                provisioning_done.set()
+                except asyncio.CancelledError: pass
+
+            # --- 并行启动任务 ---
+            monitor_task = asyncio.create_task(monitor_status())
+            provision_task = asyncio.create_task(stack.provision_device(target_uuid))
+            
+            try:
+                print("正在进行握手流程...")
+                await asyncio.wait_for(provisioning_done.wait(), timeout=60.0)
+                print("配网流程结束。")
+            except asyncio.TimeoutError:
+                print("配网超时。")
+            finally:
+                monitor_task.cancel()
+                provision_task.cancel()
+                await asyncio.gather(monitor_task, provision_task, return_exceptions=True)
+
+            print("\n运行中，按 Ctrl+C 退出。")
+            await asyncio.get_event_loop().create_future()old_string: |
+            # --- 4. 执行配网 ---
+            print(f"\n开始为设备 {target_uuid.hex()} 进行配网...")
+            provisioning_done = asyncio.Event()
+            
+            # --- 注册 UI 广播回调 (你的建议方案) ---
+            async def on_auth_request(uuid, method):
                 print("\n" + "!"*20)
                 print(f"收到配网认证请求！设备 UUID: {uuid.hex()}")
                 print("请查看 p1 (test-mesh) 屏幕显示的 PIN 码。")
                 
                 # 在独立线程接收输入，避免阻塞协议栈
-                pin_str = await asyncio.to_thread(input, "请输入该 PIN 码 (例如 123456): ")
+                pin_str = await asyncio.thread(input, "请输入该 PIN 码 (例如 123456): ")
                 try:
                     pin = int(pin_str.strip())
                     await stack.resume_provisioning_with_pin(uuid, pin)
@@ -132,6 +185,7 @@ async def main():
 
             print("\n运行中，按 Ctrl+C 退出。")
             await asyncio.get_event_loop().create_future()
+
 
     except Exception as e:
         logger.error(f"发生错误: {e}")
