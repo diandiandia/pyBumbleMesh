@@ -84,6 +84,10 @@ class MeshStack:
                         pub_key_pdu = session.get_public_key_pdu()
                         await pb_link.send_transaction(pub_key_pdu)
                 
+                # Special Check: If session enters AUTH_INPUT, it won't return a response yet.
+                # The interactive script will detect this state and call set_auth_value.
+                # Once set_auth_value is called, we must manually trigger the next step (Confirm).
+                
                 if session.state == ProvisioningState.COMPLETE:
                     logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
                     self.storage.save_node(next_addr, uuid, session.shared_secret)
@@ -91,6 +95,24 @@ class MeshStack:
             asyncio.create_task(handle())
         
         pb_link.on_provisioning_pdu = on_pdu
+
+    async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
+        """Resumes a provisioning session after the user provides a numeric PIN."""
+        # Find the session
+        # This is a bit tricky as sessions are stored by link_id in provisioning_sessions
+        # and provisioning_states.
+        for link_id, session in self.provisioning_states.items():
+            # For simplicity, we assume one active session or match by some logic
+            if session.state == ProvisioningState.AUTH_INPUT:
+                # 1. Convert PIN to 16-octet big-endian AuthValue
+                auth_value = pin.to_bytes(16, 'big')
+                session.set_auth_value(auth_value)
+                
+                # 2. Manually trigger the next step (Confirm)
+                confirm_pdu = session._send_confirm()
+                pb_link = self.provisioning_sessions[link_id]
+                await pb_link.send_transaction(confirm_pdu)
+                break
         
         # Start the flow
         invite_pdu = session.invite()

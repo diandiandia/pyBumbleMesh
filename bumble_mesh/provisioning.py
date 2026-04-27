@@ -31,12 +31,17 @@ class ProvisioningSession:
         self.shared_secret: Optional[bytes] = None
         self.provisioning_salt: Optional[bytes] = None
         
+        # OOB Selection
+        self.auth_method = 0
+        self.auth_action = 0
+        self.auth_size = 0
+
         # Exact Payloads (EXCLUDING Type Byte) for ConfirmationInputs
         self.payload_invite = b''       # 1 byte
         self.payload_capabilities = b'' # 11 bytes
         self.payload_start = b''        # 5 bytes
         self.payload_pubkey_p = b''     # 64 bytes
-        self.payload_pubkey_d = b''     # 64 bytes
+        self.payload_pubkey_device = b'' # 64 bytes
 
         self.auth_value = b'\x00' * 16
         self.provisioner_random = os.urandom(16)
@@ -53,6 +58,8 @@ class ProvisioningSession:
         if len(auth_value) != 16:
             raise ValueError("AuthValue must be 16 bytes")
         self.auth_value = auth_value
+        if self.state == ProvisioningState.AUTH_INPUT:
+            self.state = ProvisioningState.CONFIRM
 
     def handle_pdu(self, pdu: bytes, **kwargs) -> Optional[bytes]:
         pdu_type = pdu[0]
@@ -78,9 +85,24 @@ class ProvisioningSession:
         # pdu is [0x01, data(11)]
         self.payload_capabilities = pdu[1:]
         
+        # Capability Mapping (Simplified for BlueZ test-mesh)
+        # BlueZ test-mesh usually has OutputNumeric (Action 0x02)
+        output_size = self.payload_capabilities[5]
+        output_action = int.from_bytes(self.payload_capabilities[6:8], 'big')
+        
+        if output_size > 0 and (output_action & 0x02):
+            logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
+            self.auth_method = 0x02 # Output OOB
+            self.auth_action = 0x02 # Output Numeric
+            self.auth_size = output_size
+        else:
+            logger.info("Using No OOB authentication")
+            self.auth_method = 0x00
+            self.auth_action = 0x00
+            self.auth_size = 0x00
+
         # Construct Start Payload (5 bytes)
-        # Algorithm(1)=0, PublicKey(1)=0, AuthMethod(1)=0, AuthAction(1)=0, AuthSize(1)=0
-        self.payload_start = b'\x00\x00\x00\x00\x00'
+        self.payload_start = bytes([0x00, 0x00, self.auth_method, self.auth_action, self.auth_size])
         self.state = ProvisioningState.PUBLIC_KEY
         return b'\x02' + self.payload_start
 
@@ -88,13 +110,19 @@ class ProvisioningSession:
         self.payload_pubkey_p = self.local_key.x + self.local_key.y
         return b'\x03' + self.payload_pubkey_p
 
-    def _handle_public_key(self, pdu: bytes) -> bytes:
+    def _handle_public_key(self, pdu: bytes) -> Optional[bytes]:
         # pdu is [0x03, X(32), Y(32)]
         self.payload_pubkey_device = pdu[1:]
         self.remote_public_key_x = pdu[1:33]
         self.remote_public_key_y = pdu[33:65]
         
         self.shared_secret = self.local_key.dh(self.remote_public_key_x, self.remote_public_key_y)
+        
+        if self.auth_method != 0x00:
+            logger.info("Authentication Required. Waiting for User Input...")
+            self.state = ProvisioningState.AUTH_INPUT
+            return None # Pause and wait for set_auth_value
+        
         self.state = ProvisioningState.CONFIRM
         return self._send_confirm()
 

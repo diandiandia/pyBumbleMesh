@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 async def main():
     # 允许通过命令行指定 hci 编号，例如: python -m examples.interactive_provisioner hci-socket:0
-    transport_path = sys.argv[1] if len(sys.argv) > 1 else 'hci-socket:0'
+    transport_path = sys.argv[1] if len(sys.argv) > 1 else 'hci-socket:1'
     
     try:
         async with await open_transport(transport_path) as (hci_source, hci_sink):
@@ -68,12 +68,17 @@ async def main():
 
             # --- 3. 用户选择 ---
             try:
-                selection = input("\n请输入想要配网的设备编号 (或输入 'q' 退出): ")
+                selection = input("\n请输入编号，或直接粘贴 UUID (32位十六进制) 强制配网 (或输入 'q' 退出): ").strip()
                 if selection.lower() == 'q': return
-                idx = int(selection)
-                target_uuid, _, _ = discovered_devices[idx]
                 
-                auth_str = input("请输入 AuthValue (16字节十六进制，直接回车使用全0): ").strip()
+                if len(selection) == 32:
+                    target_uuid = bytes.fromhex(selection)
+                else:
+                    idx = int(selection)
+                    target_uuid, _, _ = discovered_devices[idx]
+                
+                print(f"目标 UUID: {target_uuid.hex()}")
+                auth_str = input("请输入 AuthValue (16字节十六进制，pi1若未显示则直接回车): ").strip()
                 try:
                     auth_value = bytes.fromhex(auth_str) if auth_str else b'\x00' * 16
                     if len(auth_value) != 16:
@@ -92,18 +97,35 @@ async def main():
             
             # 劫持状态检查
             original_handle_pdu = stack._on_bearer_pdu
-            def on_pdu_monitored(pdu):
-                original_handle_pdu(pdu)
-                for s in stack.provisioning_states.values():
-                    if s.state == ProvisioningState.COMPLETE: provisioning_done.set()
             
-            stack.bearer.on_pdu = on_pdu_monitored
-            await stack.provision_device(target_uuid, auth_value=auth_value)
+            async def check_provisioning_status():
+                while not provisioning_done.is_set():
+                    await asyncio.sleep(0.5)
+                    for link_id, s in stack.provisioning_states.items():
+                        if s.state == ProvisioningState.AUTH_INPUT:
+                            print("\n" + "!"*20)
+                            print("设备已激活！请查看 p1 (test-mesh) 屏幕显示的 PIN 码。")
+                            pin_str = input("请输入该 PIN 码 (例如 123456): ").strip()
+                            try:
+                                pin = int(pin_str)
+                                await stack.resume_provisioning_with_pin(target_uuid, pin)
+                            except ValueError:
+                                print("错误：请输入纯数字 PIN 码")
+                        
+                        if s.state == ProvisioningState.COMPLETE:
+                            provisioning_done.set()
+                        elif s.state == ProvisioningState.FAILED:
+                            print("\n配网失败！请检查 AuthValue 是否正确或重试。")
+                            provisioning_done.set()
+
+            asyncio.create_task(check_provisioning_status())
+            
+            await stack.provision_device(target_uuid)
             
             try:
-                print("正在交换密钥...")
-                await asyncio.wait_for(provisioning_done.wait(), timeout=30.0)
-                print("配网成功！")
+                print("正在进行安全握手 (交换公钥与身份验证)...")
+                await asyncio.wait_for(provisioning_done.wait(), timeout=60.0)
+                print("配网流程结束。")
             except asyncio.TimeoutError:
                 print("配网超时。")
 

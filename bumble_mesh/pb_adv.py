@@ -84,30 +84,30 @@ class PBAdvLink:
             fcs = crc8(pdu)
             size = len(pdu)
             
-            # --- EXACT BLUEZ 5.86 LOGIC (MATCHING PB_ADV_MTU 24) ---
-            # BlueZ reassembly offset is hardcoded: offset = 20 + (seg_idx-1)*23
-            # This means Start PDU MUST contain 20 bytes of data (including header bits)
-            # Or more accurately, the 'sar' buffer offset logic:
-            # Start Segment Data = PB_ADV_MTU(24) - 4 (Num, GPC, Size, FCS) = 20 octets
-            # Continuation Segment Data = PB_ADV_MTU(24) - 1 (GPC) = 23 octets
+            # --- STRICT BLUEZ 5.86 COMPATIBILITY (MTU = 24) ---
+            # BlueZ defines PB_ADV_MTU as 24.
+            # Start Segment Header: ID(4) + Num(1) + GPC(1) + Size(2) + FCS(1) = 9 bytes.
+            # Max Data in Start = 24 - 9 = 15 octets.
+            # Cont Segment Header: ID(4) + Num(1) + GPC(1) = 6 bytes.
+            # Max Data in Cont = 24 - 6 = 18 octets.
             
-            if size > 20:
-                max_seg = 1 + ((size - 20 - 1) // 23)
-                init_size = 20
+            if size > 15:
+                max_seg = 1 + ((size - 15 - 1) // 18)
+                init_size = 15
             else:
                 max_seg = 0
                 init_size = size
 
             segments = []
-            # 1. Start: [ID(4)] [Num(1)] [GPC(max_seg<<2)] [Size(2)] [FCS(1)] [Data(20)]
+            # 1. Start Segment
             header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (max_seg << 2)]) + \
                      size.to_bytes(2, 'big') + bytes([fcs])
             segments.append(header + pdu[:init_size])
             
-            # 2. Cont: [ID(4)] [Num(1)] [GPC(i<<2 | 02)] [Data(23)]
+            # 2. Continuation Segments
             consumed = init_size
             for i in range(1, max_seg + 1):
-                seg_size = min(23, size - consumed)
+                seg_size = min(18, size - consumed)
                 header = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (i << 2) | 0x02])
                 segments.append(header + pdu[consumed : consumed + seg_size])
                 consumed += seg_size
