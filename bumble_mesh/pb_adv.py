@@ -70,8 +70,12 @@ class PBAdvLink:
             self.trans_ack_received.set()
             return
 
-        # REMOVED: Flawed logic that stopped TX when peer started talking.
-        # We must finish our own segments to avoid "bad-pdu" on peer side.
+        # SMART EVASION: If we are TX-ing but receive ANY data from the peer,
+        # it means they either got our message and are replying, or there's a collision.
+        # Stop our TX immediately to listen to their message.
+        if (is_start or is_cont) and self.current_ack_id is not None:
+            logger.info(f"Peer traffic detected (Trans {trans_num:02x}). Easing off local TX.")
+            self.trans_ack_received.set()
 
         if is_start:
             seg_n = gpc_byte >> 2

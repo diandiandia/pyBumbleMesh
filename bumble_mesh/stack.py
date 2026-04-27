@@ -87,20 +87,12 @@ class MeshStack:
                                         if self.on_auth_needed:
                                             asyncio.create_task(self.on_auth_needed(uuid, session.auth_method))
                                     
-                                    # NEW RELIABILITY STRATEGY: 
-                                    # As a Provisioner, we stay SILENT and wait for the Device's Public Key first.
-                                    # This avoids half-duplex collisions during the large 65-byte PK exchange.
-                                    logger.info("START confirmed. Waiting for DEVICE Public Key (Sequential Mode)...")
-                                    
-                                    wait_start = time.time()
-                                    while session.shared_secret is None:
-                                        if time.time() - wait_start > 20.0:
-                                            logger.warning("Still waiting for Device PK... triggering local PK as fallback.")
-                                            break
-                                        await asyncio.sleep(0.5)
-                                    
-                                    # Now that we've heard them (or timed out), we send ours.
-                                    await pb_link.send_transaction(session.get_public_key_pdu())
+                                    # Silence window: Let BlueZ process our START
+                                    await asyncio.sleep(1.0)
+                                    logger.info("Sending Local Public Key (65 bytes)...")
+                                    success = await pb_link.send_transaction(session.get_public_key_pdu())
+                                    if success:
+                                        logger.info("[CONFIRM] Local Public Key has been FULLY SENT and ACKED by device.")
                             else:
                                 await pb_link.send_transaction(p_to_send)
                         
