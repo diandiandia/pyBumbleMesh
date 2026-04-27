@@ -86,15 +86,16 @@ class MeshStack:
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
                     if resp:
                         # Send the response (e.g. START)
-                        await pb_link.send_transaction(resp)
+                        success = await pb_link.send_transaction(resp)
                         
-                        # Only proceed if we haven't failed yet (e.g. didn't get a Type 09 in between)
-                        if session.state == ProvisioningState.FAILED:
+                        # Only proceed if the transaction was acknowledged and we haven't failed
+                        if not success or session.state == ProvisioningState.FAILED:
+                            logger.error("Transaction failed or session entered FAILED state, stopping worker.")
                             break
 
                         # Sequential follow-up: If START was sent, follow with PUBKEY after a small gap
                         if resp[0] == 0x02:
-                            await asyncio.sleep(0.5) # Increased gap for BlueZ state transition
+                            await asyncio.sleep(0.5) 
                             pub_key_pdu = session.get_public_key_pdu()
                             await pb_link.send_transaction(pub_key_pdu)
                     

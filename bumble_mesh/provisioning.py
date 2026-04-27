@@ -89,16 +89,27 @@ class ProvisioningSession:
         # pdu is [0x01, data(11)]
         self.payload_capabilities = pdu[1:]
         
-        # Capability Mapping (Strictly aligned with BlueZ test-mesh)
-        # BlueZ test-mesh has OutputNumeric (Bit 3, mask 0x0008)
+        # Capability Mapping (Strictly aligned with BlueZ test-mesh and Mesh Spec)
+        # Table 5.5: Bits 0-4 of Output OOB Action correspond to values 0-4 in Table 5.15
         output_size = self.payload_capabilities[5]
-        output_action = int.from_bytes(self.payload_capabilities[6:8], 'big')
+        output_action_mask = int.from_bytes(self.payload_capabilities[6:8], 'big')
         
-        if output_size > 0 and (output_action & 0x08):
-            logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
-            self.auth_method = 0x02 # Output OOB
-            self.auth_action = 0x04 # Output Numeric (Fixed: 0x04 is Numeric, 0x02 was Vibrate)
-            self.auth_size = output_size
+        if output_size > 0:
+            if output_action_mask & 0x10: # Bit 4: Output Numeric
+                logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
+                self.auth_method = 0x02 
+                self.auth_action = 0x04 
+                self.auth_size = output_size
+            elif output_action_mask & 0x08: # Bit 3: Output Alphanumeric
+                logger.info(f"Device supports OutputAlphanumeric OOB (Size: {output_size})")
+                self.auth_method = 0x02
+                self.auth_action = 0x03
+                self.auth_size = output_size
+            else:
+                logger.info("Device has Output OOB but no supported actions, falling back to No OOB")
+                self.auth_method = 0x00
+                self.auth_action = 0x00
+                self.auth_size = 0x00
         else:
             logger.info("Using No OOB authentication")
             self.auth_method = 0x00

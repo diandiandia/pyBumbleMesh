@@ -63,7 +63,6 @@ class PBAdvLink:
         trans_num = pdu[4]
         
         # --- REFINED PREEMPTIVE STOP ---
-        # Only stop our transmit if we receive a NEW transaction START or an explicit ACK.
         is_ack = (gpc_byte & 0x03) == 0x01
         is_start = (gpc_byte & 0x03) == 0x00
         
@@ -71,12 +70,12 @@ class PBAdvLink:
             self.trans_ack_received.set()
         elif is_start and trans_num != self.last_rx_trans_num:
             # It's a new inbound transaction, peer must have received our last one.
-            if self.current_ack_id is not None:
-                self.trans_ack_received.set()
+            # Stop the loop but don't set trans_ack_received so send_transaction can return False or handle specially
+            pass 
 
         if is_start: # START
             if trans_num == self.last_rx_trans_num:
-                self._send_trans_ack(trans_num) # Re-ACK duplicates to stop peer retransmits
+                self._send_trans_ack(trans_num) # Re-ACK duplicates
                 return
             
             self.last_rx_trans_num = trans_num
@@ -106,7 +105,7 @@ class PBAdvLink:
             del self.rx_buffer[trans_id]
             del self.rx_info[trans_id]
 
-    async def send_transaction(self, pdu: bytes):
+    async def send_transaction(self, pdu: bytes) -> bool:
         # Hold the lock only for the duration of the entire transaction sequence
         async with self.tx_lock:
             self.local_trans_num = (self.local_trans_num + 1) % 256
@@ -136,20 +135,26 @@ class PBAdvLink:
             self.current_ack_id = self.local_trans_num
             self.trans_ack_received.clear()
             start_time = time.time()
-            logger.info(f"TX Trans {self.local_trans_num} (Size: {size}, FCS: {fcs:02x}, Segs: {len(segments)})")
+            logger.info(f"TX Trans {self.local_trans_num} (Type: {pdu[0]:02x}, Size: {size}, FCS: {fcs:02x}, Segs: {len(segments)})")
             
             while not self.trans_ack_received.is_set():
                 if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
+                # Check for premature stop (e.g. Error PDU received in handle_pdu)
+                if self.current_ack_id is None: break 
+                
                 for seg in segments:
                     if self.trans_ack_received.is_set(): break
                     await self._send_wrapper(seg)
                     await asyncio.sleep(0.01)
                 
-                # Release control temporarily to allow handle_pdu/ACKs to run
                 try: 
                     await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
                 except asyncio.TimeoutError:
                     continue
+            
+            success = self.trans_ack_received.is_set()
+            self.current_ack_id = None
+            return success
 
     def _send_trans_ack(self, trans_id: int):
         pdu = self.link_id.to_bytes(4, 'big') + bytes([trans_id, 0x01])
