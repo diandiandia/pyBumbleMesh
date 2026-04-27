@@ -88,15 +88,20 @@ class ProvisioningSession:
     def _handle_capabilities(self, pdu: bytes) -> Optional[bytes]:
         if self.state != ProvisioningState.INVITE: return None
         self.pdu_capabilities = pdu
-        output_size = pdu[5]
-        output_action_mask = int.from_bytes(pdu[6:8], 'big')
         
-        if output_size > 0 and (output_action_mask & 0x0008):
+        # Spec Table 5.37: Provisioning Capabilities
+        # pdu[5] is Static OOB Type
+        # pdu[6] is Output OOB Size
+        # pdu[7:9] is Output OOB Action (2 bytes)
+        output_size = pdu[6]
+        output_action_mask = int.from_bytes(pdu[7:9], 'big')
+        
+        if output_size > 0 and (output_action_mask & 0x0008): # 0x0008 = OutputNumeric
             logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
-            self.auth_method, self.auth_action = 0x02, 0x03 # v1.0 Digit
+            self.auth_method, self.auth_action = 0x02, 0x03 # Output OOB, Numeric
             self.auth_size = output_size
         else:
-            logger.info("Using No OOB authentication")
+            logger.info(f"OOB not supported or mask mismatch (Size: {output_size}, Mask: {output_action_mask:04x}). Falling back to No OOB.")
             self.auth_method, self.auth_action, self.auth_size = 0, 0, 0
 
         self.pdu_start = b'\x02' + bytes([0x00, 0x00, self.auth_method, self.auth_action, self.auth_size])

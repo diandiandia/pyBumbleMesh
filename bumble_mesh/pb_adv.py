@@ -140,9 +140,9 @@ class PBAdvLink:
                 for seg in segments:
                     if self.trans_ack_received.is_set(): break
                     await self._send_wrapper(seg)
-                    await asyncio.sleep(0.12) # Gap for radio listening
+                    await asyncio.sleep(0.15) # Increased from 0.12 to 0.15 for reliability
                 
-                wait_time = 0.8 + random.random() * 0.7
+                wait_time = 1.0 + random.random() * 0.8 # Slightly longer wait
                 try: await asyncio.wait_for(self.trans_ack_received.wait(), wait_time)
                 except asyncio.TimeoutError: continue
             
