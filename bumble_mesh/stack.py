@@ -245,15 +245,28 @@ class MeshStack:
         access_pdu = self._create_access_pdu(opcode, payload)
         
         # 2. Upper Transport Layer (Encryption)
-        # Use a default DevKey if no AppKey is provided (simplified)
-        key = app_key if app_key else b'\x00' * 16 # Placeholder
+        # Determine encryption key and AKF
+        # Configuration Model (Model ID 0x0001) MUST use DevKey and AKF=0
+        if model.MODEL_ID == 0x0001:
+            key = self.upper_transport.get_dev_key(dst)
+            if not key:
+                logger.warning(f"No DevKey found for {dst:04x}, using default zero key.")
+                key = b'\x00' * 16
+            akf = 0
+            aid = 0
+        else:
+            # Use provided AppKey or fallback
+            key = app_key if app_key else b'\x00' * 16 
+            akf = 1 if app_key else 0
+            aid = 0 # TODO: Calculate AID from AppKey
+            
         encrypted_pdu = self.upper_transport.encrypt(
             self.unicast_address, dst, self.network.seq, self.network.iv_index,
-            access_pdu, key, akf=0, aid=0
+            access_pdu, key, akf=akf, aid=aid
         )
         
         # 3. Lower Transport Layer (Segmentation)
-        segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, encrypted_pdu)
+        segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, encrypted_pdu, akf=akf, aid=aid)
         
         # 4. Network Layer (Encryption) & Bearer Layer (Send)
         for segment in segments:
