@@ -8,6 +8,9 @@ from .transport import LowerTransportLayer
 from .access import AccessLayer
 from .pb_adv import PBAdvLink
 from .provisioning import ProvisioningSession, ProvisioningState
+from .config_manager import MeshConfigManager
+from .models.config import ConfigClient
+from .models.generic_onoff import GenericOnOffClient
 from .upper_transport import UpperTransportLayer
 from .storage import MeshStorage
 
@@ -33,13 +36,20 @@ class MeshStack:
         
         self.bearer = AdvBearer(device)
         self.upper_transport = UpperTransportLayer()
+        # Load keys from storage
+        for ak in self.storage.get_app_keys():
+            self.upper_transport.add_app_key(ak['index'], ak['key'])
         for node in self.storage.get_nodes():
             self.upper_transport.add_dev_key(node['address'], node['dev_key'])
             
         self.transport = LowerTransportLayer()
         self.access = AccessLayer()
-        self.provisioning_sessions = {} 
-        self.provisioning_states = {} 
+        self.config_manager = MeshConfigManager(self)
+        
+        # --- REGISTER MODELS ---
+        self.config_client = self.config_manager.config_client # Re-use from manager
+        self.onoff_client = GenericOnOffClient()
+        self.access.register_model(self.onoff_client)
         
         # --- UI BROADCAST CALLBACK ---
         self.on_auth_needed = None 
@@ -110,6 +120,9 @@ class MeshStack:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
                         self.storage.save_node(next_addr, uuid, session.shared_secret)
                         self.upper_transport.add_dev_key(next_addr, session.shared_secret)
+                        
+                        # --- START AUTOMATIC CONFIGURATION ---
+                        asyncio.create_task(self.config_manager.configure_node(next_addr, 0, b'\x02'*16))
                         break
                 except Exception as e: logger.error(f"Worker Error: {e}")
                 finally: pdu_queue.task_done()

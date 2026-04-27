@@ -32,6 +32,19 @@ class MeshStorage:
                 name TEXT,
                 composition_data BLOB
             )''')
+            # 4. AppKeys
+            cursor.execute('''CREATE TABLE IF NOT EXISTS app_keys (
+                app_index INTEGER PRIMARY KEY,
+                app_key BLOB
+            )''')
+            # 5. Node Models
+            cursor.execute('''CREATE TABLE IF NOT EXISTS node_models (
+                node_addr INTEGER,
+                elem_addr INTEGER,
+                model_id INTEGER,
+                is_vendor INTEGER,
+                PRIMARY KEY(node_addr, elem_addr, model_id)
+            )''')
             conn.commit()
 
     # --- Settings Management ---
@@ -76,3 +89,31 @@ class MeshStorage:
             cursor = conn.cursor()
             cursor.execute("SELECT unicast_address, uuid, dev_key, name FROM nodes")
             return [{"address": row[0], "uuid": row[1], "dev_key": row[2], "name": row[3]} for row in cursor.fetchall()]
+
+    # --- AppKey Management ---
+    def save_app_key(self, app_index: int, app_key: bytes):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO app_keys (app_index, app_key) VALUES (?, ?)",
+                         (app_index, app_key))
+            conn.commit()
+
+    def get_app_keys(self) -> List[Dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT app_index, app_key FROM app_keys")
+            return [{"index": row[0], "key": row[1]} for row in cursor.fetchall()]
+
+    # --- Model Management ---
+    def save_node_model(self, node_addr: int, elem_addr: int, model_id: int, is_vendor: bool = False):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR REPLACE INTO node_models (node_addr, elem_addr, model_id, is_vendor) VALUES (?, ?, ?, ?)",
+                         (node_addr, elem_addr, model_id, 1 if is_vendor else 0))
+            conn.commit()
+
+    def get_node_models(self, node_addr: int) -> List[Dict]:
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT elem_addr, model_id, is_vendor FROM node_models WHERE node_addr=?", (node_addr,))
+            return [{"elem_addr": row[0], "model_id": row[1], "is_vendor": bool(row[2])} for row in cursor.fetchall()]
