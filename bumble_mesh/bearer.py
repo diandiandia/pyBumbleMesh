@@ -41,7 +41,8 @@ class AdvBearer:
                 advertising_filter_policy=0
             )
         )
-        await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=1))
+        # We start with advertising DISABLED to allow full scanning
+        await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=0))
 
     def _on_advertisement(self, advertisement):
         self.pkt_count += 1
@@ -56,12 +57,6 @@ class AdvBearer:
             ad_type = data[i+1]
             payload = data[i+2 : i+1+length]
             
-            if ad_type in (0x29, 0x2A, 0x2B):
-                if ad_type == 0x29:
-                    logger.debug(f"PB-ADV RX: {address} | Data: {payload.hex()}")
-                else:
-                    logger.debug(f"MESH RX: {address} | Type: 0x{ad_type:02X} | Data: {payload.hex()}")
-
             if ad_type in (0x29, 0x2A):
                 if self.on_pdu: self.on_pdu(payload)
             elif ad_type == 0x2B:
@@ -76,14 +71,19 @@ class AdvBearer:
 
     async def send_pdu(self, pdu: bytes, is_pb_adv: bool = True):
         async with self.tx_lock:
-            # PB-ADV / Mesh PDU wrapping
             ad_type = 0x29 if is_pb_adv else 0x2A
             ad_data = bytes([len(pdu) + 1, ad_type]) + pdu
             
-            # Efficient toggle (BlueZ is sensitive to this timing)
-            await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=0))
+            # --- "SHOTGUN" TRANSMIT PATTERN ---
+            # Pulse the advertisement then immediately return to scanning.
+            # This prevents the provisioner from being "deaf" while sending.
             await self.device.host.send_command(HCI_LE_Set_Advertising_Data_Command(advertising_data=ad_data))
             await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=1))
             
-            # Shorter sleep to improve throughput while keeping HCI happy
-            await asyncio.sleep(0.02)
+            # Hold for a short burst (Mesh segments are tiny, 40ms is plenty for 3 channels)
+            await asyncio.sleep(0.04)
+            
+            await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=0))
+            
+            # Safety gap before next command or next RX
+            await asyncio.sleep(0.01)

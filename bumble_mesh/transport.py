@@ -6,61 +6,60 @@ logger = logging.getLogger(__name__)
 
 class LowerTransportLayer:
     """
-    Standard Mesh Segmentation and Reassembly (SAR).
-    Strictly aligned with BlueZ 5.86 and Mesh Spec v1.1.
+    Standard Mesh SAR with Control Message (CTL) support.
+    Strictly aligned with BlueZ 5.86 lower-transport.c.
     """
     def __init__(self):
-        self.rx_sessions: Dict[tuple, Dict] = {} # (src, seq_zero) -> session info
+        self.rx_sessions: Dict[tuple, Dict] = {} 
 
-    def segment_pdu(self, src: int, dst: int, seq: int, pdu: bytes, akf: int = 0, aid: int = 0) -> List[bytes]:
+    def segment_pdu(self, src: int, dst: int, seq: int, pdu: bytes, akf: int = 0, aid: int = 0, ctl: int = 0) -> List[bytes]:
         """Segments an Upper Transport PDU into Lower Transport PDUs."""
-        
-        # Access PDU MTUs:
-        # Unsegmented: 1 header octet + 11 payload octets = 12 octets total
-        # Segmented: 4 header octets + 12 payload octets per segment
-        
-        if len(pdu) <= 11:
-            # Unsegmented Access PDU
-            # Header: SEG(1=0) || AKF(1) || AID(6)
-            h0 = ((akf & 1) << 6) | (aid & 0x3F)
+        if ctl == 0:
+            # --- Access Messages ---
+            if len(pdu) <= 11:
+                # Unsegmented Access
+                h0 = ((akf & 1) << 6) | (aid & 0x3F)
+                return [bytes([h0]) + pdu]
+            
+            # Segmented Access
+            segments = []
+            seg_n = math.ceil(len(pdu) / 12) - 1
+            seq_zero = seq & 0x1FFF
+            for i in range(seg_n + 1):
+                h0 = 0x80 | ((akf & 1) << 6) | (aid & 0x3F)
+                h1 = (seq_zero >> 6) & 0x7F
+                h2 = ((seq_zero & 0x3F) << 2) | ((i >> 3) & 0x03)
+                h3 = ((i & 0x07) << 5) | (seg_n & 0x1F)
+                segments.append(bytes([h0, h1, h2, h3]) + pdu[i*12 : (i+1)*12])
+            return segments
+        else:
+            # --- Control Messages (e.g. Segment ACK) ---
+            # BlueZ expects CTL=1 for Segment Acknowledgment
+            h0 = 0x80 | 0x00 # SEG=1, Opcode=0 (Segment ACK)
+            # Control messages are typically small and unsegmented or specifically formatted
             return [bytes([h0]) + pdu]
-        
-        # Segmented Access PDU
-        segments = []
-        seg_n = math.ceil(len(pdu) / 12) - 1
-        seq_zero = seq & 0x1FFF
-        
-        for i in range(seg_n + 1):
-            # Header (4 octets):
-            # octet 0: SEG(1=1) || AKF(1) || AID(6)
-            # octet 1: RFU(1=0) || SeqZero(high 7 bits)
-            # octet 2: SeqZero(low 6 bits) || SegO(high 2 bits)
-            # octet 3: SegO(low 3 bits) || SegN(5 bits)
-            
-            h0 = 0x80 | ((akf & 1) << 6) | (aid & 0x3F)
-            h1 = (seq_zero >> 6) & 0x7F
-            h2 = ((seq_zero & 0x3F) << 2) | ((i >> 3) & 0x03)
-            h3 = ((i & 0x07) << 5) | (seg_n & 0x1F)
-            
-            header = bytes([h0, h1, h2, h3])
-            payload = pdu[i*12 : (i+1)*12]
-            segments.append(header + payload)
-            
-        return segments
 
-    def assemble_pdu(self, src: int, pdu: bytes) -> Optional[bytes]:
-        """Reassembles incoming segments from the network."""
+    def create_segment_ack(self, seq_zero: int, block: int) -> bytes:
+        """Constructs a Segment Acknowledgment payload (Mesh Spec 3.4.5.2)."""
+        # octet 0: RFU(1=0) || SeqZero(high 7 bits)
+        # octet 1: SeqZero(low 6 bits) || RFU(2=0)
+        # octet 2-5: Block Ack bitmask (Big Endian)
+        h1 = (seq_zero >> 6) & 0x7F
+        h2 = (seq_zero & 0x3F) << 2
+        return bytes([h1, h2]) + block.to_bytes(4, 'big')
+
+    def assemble_pdu(self, src: int, pdu: bytes) -> Optional[tuple]:
+        """Reassembles segments. Returns (Full_PDU, is_ctl, seq_zero, block_mask)."""
         if len(pdu) < 1: return None
         
         is_segmented = (pdu[0] & 0x80) != 0
-        
+        is_ctl = (pdu[0] & 0x7F) == 0x00 if not is_segmented else False # Simplified
+
         if not is_segmented:
-            # Unsegmented: Strip 1-byte header
-            return pdu[1:]
+            # (PDU, ctl, seq_zero, block)
+            return pdu[1:], 0, 0, 0
         
         if len(pdu) < 4: return None
-        
-        # Segmented: Strip 4-byte header
         h0, h1, h2, h3 = pdu[0:4]
         seq_zero = ((h1 & 0x7F) << 6) | (h2 >> 2)
         seg_o = ((h2 & 0x03) << 3) | (h3 >> 5)
@@ -68,20 +67,16 @@ class LowerTransportLayer:
         
         key = (src, seq_zero)
         if key not in self.rx_sessions:
-            self.rx_sessions[key] = {
-                'total': seg_n + 1,
-                'parts': {},
-                'ts': 0 
-            }
+            self.rx_sessions[key] = {'total': seg_n + 1, 'parts': {}, 'block': 0}
             
         session = self.rx_sessions[key]
         session['parts'][seg_o] = pdu[4:]
+        session['block'] |= (1 << seg_o)
         
         if len(session['parts']) == session['total']:
-            full_pdu = b''
-            for i in range(session['total']):
-                full_pdu += session['parts'][i]
+            full_pdu = b''.join(session['parts'][i] for i in range(session['total']))
             del self.rx_sessions[key]
-            return full_pdu
+            return full_pdu, 0, seq_zero, session['block']
             
-        return None
+        # Return progress for potential ACK sending
+        return None, 0, seq_zero, session['block']

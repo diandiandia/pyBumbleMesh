@@ -15,12 +15,9 @@ logger = logging.getLogger(__name__)
 class MeshStack:
     def __init__(self, device, net_key: bytes, unicast_address: int, db_path: str = "mesh_database.db"):
         self.storage = MeshStorage(db_path)
-        
-        # Load or use provided settings
         self.unicast_address = int(self.storage.get_setting("unicast_address", unicast_address))
         self.storage.set_setting("unicast_address", self.unicast_address)
         
-        # Load NetKey
         networks = self.storage.get_networks()
         if not networks:
             self.storage.save_network(0, net_key, 0)
@@ -30,23 +27,19 @@ class MeshStack:
             self.net_key = networks[0]['key']
             self.iv_index = networks[0]['iv_index']
 
-        # Load Sequence Number
         self.network = NetworkLayer(self.net_key, iv_index=self.iv_index)
         self.network.seq = int(self.storage.get_setting("seq", 0))
         
         self.bearer = AdvBearer(device)
         self.upper_transport = UpperTransportLayer()
-        
-        # Load DevKeys for existing nodes
         for node in self.storage.get_nodes():
             self.upper_transport.add_dev_key(node['address'], node['dev_key'])
             
         self.transport = LowerTransportLayer()
         self.access = AccessLayer()
-        self.provisioning_sessions = {} # UUID -> PBAdvLink
-        self.provisioning_states = {} # UUID -> ProvisioningSession
-        
-        # Link events
+        self.provisioning_sessions = {} 
+        self.provisioning_states = {} 
+
         self.bearer.on_pdu = self._on_bearer_pdu
         self.bearer.on_unprovisioned_device = self._on_unprovisioned_device
 
@@ -54,10 +47,9 @@ class MeshStack:
         await self.bearer.start()
 
     def _on_unprovisioned_device(self, uuid, rssi, oob_info):
-        logger.info(f"Found Unprovisioned Device: UUID={uuid.hex()}, RSSI={rssi}, OOB={oob_info.hex()}")
+        logger.info(f"Found Unprovisioned Device: UUID={uuid.hex()}")
 
     async def provision_device(self, uuid: bytes, auth_value: bytes = None):
-        """Starts a full PB-ADV provisioning process for a device."""
         nodes = self.storage.get_nodes()
         next_addr = self.unicast_address + 1
         if nodes: next_addr = max(n['address'] for n in nodes) + 1
@@ -65,215 +57,109 @@ class MeshStack:
         link_id = random.getrandbits(32)
         pb_link = PBAdvLink(link_id, lambda pdu: self.bearer.send_pdu(pdu, is_pb_adv=True))
         self.provisioning_sessions[link_id] = pb_link
-        
         await pb_link.open(uuid)
         
         session = ProvisioningSession()
-        if auth_value:
-            session.set_auth_value(auth_value)
+        if auth_value: session.set_auth_value(auth_value)
         self.provisioning_states[link_id] = session
         
-        # --- SEQUENTIAL PDU PROCESSING QUEUE ---
         pdu_queue = asyncio.Queue()
-
         async def pdu_worker():
             while True:
                 pdu = await pdu_queue.get()
                 try:
-                    if session.state == ProvisioningState.FAILED or session.state == ProvisioningState.COMPLETE:
-                        break
-                        
+                    if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE): break
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
                     if resp:
-                        # If we just received CAPABILITIES, we send START and then PUBKEY
-                        if resp[0] == 0x02:
+                        if resp[0] == 0x02: # START
                             success = await pb_link.send_transaction(resp)
                             if success and session.state != ProvisioningState.FAILED:
-                                # Small delay before sending our PubKey to let peer prepare
-                                await asyncio.sleep(0.3)
+                                await asyncio.sleep(0.5) # Wait for BlueZ acceptor
                                 await pb_link.send_transaction(session.get_public_key_pdu())
                         else:
-                            # Standard single response
                             await pb_link.send_transaction(resp)
-                    
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
                         self.storage.save_node(next_addr, uuid, session.shared_secret)
                         self.upper_transport.add_dev_key(next_addr, session.shared_secret)
                         break
-                except Exception as e:
-                    logger.error(f"Error in PDU worker: {e}")
-                finally:
-                    pdu_queue.task_done()
+                except Exception as e: logger.error(f"Error in PDU worker: {e}")
+                finally: pdu_queue.task_done()
 
         worker_task = asyncio.create_task(pdu_worker())
         pb_link.on_provisioning_pdu = lambda pdu: pdu_queue.put_nowait(pdu)
-
-        # Start the flow
-        invite_pdu = session.invite()
-        await pb_link.send_transaction(invite_pdu)
-        
-        # Keep worker alive until done
+        await pb_link.send_transaction(session.invite())
         await worker_task
 
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
-        """Resumes a provisioning session after the user provides a numeric PIN."""
-        # Find the session
-        # This is a bit tricky as sessions are stored by link_id in provisioning_sessions
-        # and provisioning_states.
         for link_id, session in self.provisioning_states.items():
-            # For simplicity, we assume one active session or match by some logic
             if session.state == ProvisioningState.AUTH_INPUT:
-                # 1. Convert PIN to 16-octet big-endian AuthValue
-                auth_value = pin.to_bytes(16, 'big')
-                session.set_auth_value(auth_value)
-                
-                # 2. Manually trigger the next step (Confirm)
+                session.set_auth_value(pin.to_bytes(16, 'big'))
                 confirm_pdu = session._send_confirm()
-                pb_link = self.provisioning_sessions[link_id]
-                await pb_link.send_transaction(confirm_pdu)
+                await self.provisioning_sessions[link_id].send_transaction(confirm_pdu)
                 break
 
-    async def remote_provision_device(self, server_addr: int, device_uuid: bytes):
-        """
-        Starts a Remote Provisioning process through a relay server.
-        """
-        # 1. Find the Remote Provisioning Client model
-        from .models.remote_provisioning import RemoteProvisioningClient
-        rp_client = next((m for m in self.access.models.values() if isinstance(m, RemoteProvisioningClient)), None)
-        if not rp_client:
-            logger.error("Remote Provisioning Client model not registered.")
-            return
-
-        # 2. Setup next available address
-        nodes = self.storage.get_nodes()
-        next_addr = self.unicast_address + 1
-        if nodes: next_addr = max(n['address'] for n in nodes) + 1
-
-        # 3. Create a standard provisioning session
-        session = ProvisioningSession()
-        outbound_count = 0
-        
-        # 4. Define callback for inbound tunnel PDUs
-        def on_inbound_pdu(src, pdu):
-            if src != server_addr: return
-            
-            async def handle():
-                nonlocal outbound_count
-                resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
-                if resp:
-                    outbound_count = (outbound_count + 1) & 0xFF
-                    opcode, payload = rp_client.pdu_send(outbound_count, resp)
-                    await self.send_model_message(server_addr, rp_client, opcode, payload)
-                    
-                    if resp[0] == 0x02: # If START, follow with PUBKEY
-                        await asyncio.sleep(0.1) # Safety delay
-                        outbound_count = (outbound_count + 1) & 0xFF
-                        opcode, payload = rp_client.pdu_send(outbound_count, session.get_public_key_pdu())
-                        await self.send_model_message(server_addr, rp_client, opcode, payload)
-
-                if session.state == ProvisioningState.COMPLETE:
-                    logger.info(f"REMOTE Provisioning Successful! Node: {next_addr:04x}")
-                    self.storage.save_node(next_addr, device_uuid, session.shared_secret)
-                    self.upper_transport.add_dev_key(next_addr, session.shared_secret)
-            
-            asyncio.create_task(handle())
-
-        rp_client.on_pdu_report = on_inbound_pdu
-
-        # 5. Open Remote Link
-        logger.info(f"Opening Remote Provisioning Link via 0x{server_addr:04x}...")
-        opcode, payload = rp_client.link_open(device_uuid)
-        await self.send_model_message(server_addr, rp_client, opcode, payload)
-        
-        # Wait for Link Status (Simplified)
-        await asyncio.sleep(2)
-        
-        # 6. Start Handshake by sending Invite
-        logger.info("Sending Remote Invite...")
-        invite_pdu = session.invite()
-        outbound_count = (outbound_count + 1) & 0xFF
-        opcode, payload = rp_client.pdu_send(outbound_count, invite_pdu)
-        await self.send_model_message(server_addr, rp_client, opcode, payload)
-
     def _on_bearer_pdu(self, pdu: bytes):
-        # Check if it's potentially PB-ADV (handled by bearer already based on AD Type)
-        # But we need to know if the bearer passed it to us.
-        # Currently bearer calls on_pdu for both Mesh PDU and PB-ADV.
-        # We need to distinguish them.
-        
-        # If length is small and looks like PB-ADV (Link ID at start)
         if len(pdu) >= 6:
             link_id = int.from_bytes(pdu[0:4], 'big')
             if link_id in self.provisioning_sessions:
                 self.provisioning_sessions[link_id].handle_pdu(pdu)
                 return
 
-        # Fallback to Mesh PDU Decryption
         result = self.network.decrypt_pdu(pdu)
-        if not result:
-            return
-            
+        if not result: return
         src, dst, transport_pdu_raw = result
         
-        # 2. Transport Reassemble
-        transport_pdu = self.transport.assemble_pdu(src, transport_pdu_raw)
-        if not transport_pdu:
-            return
-            
+        # 2. Lower Transport Handle (with Segment ACK logic)
+        res = self.transport.assemble_pdu(src, transport_pdu_raw)
+        if not res: return
+        
+        full_transport_pdu, is_ctl, seq_zero, block_mask = res
+        
+        # --- BLUEZ ALIGNMENT: Auto-reply Segment ACKs ---
+        if transport_pdu_raw[0] & 0x80: # If it was a segmented message
+            ack_payload = self.transport.create_segment_ack(seq_zero, block_mask)
+            asyncio.create_task(self._send_control_message(src, ack_payload))
+
+        if not full_transport_pdu: return # Still waiting for more segments
+
         # 3. Upper Transport Decrypt
         access_pdu = self.upper_transport.decrypt(
-            src, dst, self.network.seq, self.network.iv_index, transport_pdu, akf=0, aid=0
+            src, dst, self.network.seq, self.network.iv_index, full_transport_pdu, akf=0, aid=0
         )
-        if not access_pdu:
-            return
+        if not access_pdu: return
             
         # 4. Access Handle
         self.access.handle_pdu(src, dst, 0, access_pdu)
 
+    async def _send_control_message(self, dst: int, payload: bytes):
+        """Sends a CTL=1 message (Segment ACK)."""
+        segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, payload, ctl=1)
+        for segment in segments:
+            network_pdu = self.network.encrypt_pdu(self.unicast_address, dst, segment)
+            await self.bearer.send_pdu(network_pdu, is_pb_adv=False)
+
     async def send_model_message(self, dst: int, model, opcode: int, payload: bytes, app_key: bytes = None):
-        """
-        Sends an encrypted message from a model to a destination.
-        """
-        # Save SEQ to database before sending (to avoid reuse on crash)
         self.storage.set_setting("seq", self.network.seq + 1)
-        
-        # 1. Create Access PDU
         access_pdu = self._create_access_pdu(opcode, payload)
         
-        # 2. Upper Transport Layer (Encryption)
-        # Determine encryption key and AKF
-        # Configuration Model (Model ID 0x0001) MUST use DevKey and AKF=0
+        # Configuration Model MUST use DevKey and AKF=0
         if model.MODEL_ID == 0x0001:
-            key = self.upper_transport.get_dev_key(dst)
-            if not key:
-                logger.warning(f"No DevKey found for {dst:04x}, using default zero key.")
-                key = b'\x00' * 16
+            key = self.upper_transport.get_dev_key(dst) or b'\x00'*16
             akf = 0
             aid = 0
         else:
-            # Use provided AppKey or fallback
-            key = app_key if app_key else b'\x00' * 16 
+            key = app_key or b'\x00' * 16 
             akf = 1 if app_key else 0
-            aid = 0 # TODO: Calculate AID from AppKey
+            aid = 0 # Simple AID
             
-        encrypted_pdu = self.upper_transport.encrypt(
-            self.unicast_address, dst, self.network.seq, self.network.iv_index,
-            access_pdu, key, akf=akf, aid=aid
-        )
-        
-        # 3. Lower Transport Layer (Segmentation)
-        segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, encrypted_pdu, akf=akf, aid=aid)
-        
-        # 4. Network Layer (Encryption) & Bearer Layer (Send)
+        encrypted_pdu = self.upper_transport.encrypt(self.unicast_address, dst, self.network.seq, self.network.iv_index, access_pdu, key, akf, aid)
+        segments = self.transport.segment_pdu(self.unicast_address, dst, self.network.seq, encrypted_pdu, akf, aid)
         for segment in segments:
             network_pdu = self.network.encrypt_pdu(self.unicast_address, dst, segment)
             await self.bearer.send_pdu(network_pdu, is_pb_adv=False)
 
     def _create_access_pdu(self, opcode: int, payload: bytes) -> bytes:
-        if opcode < 0x80:
-            return bytes([opcode]) + payload
-        elif opcode < 0x10000:
-            return opcode.to_bytes(2, 'big') + payload
-        else:
-            return opcode.to_bytes(3, 'big') + payload
+        if opcode < 0x80: return bytes([opcode]) + payload
+        elif opcode < 0x10000: return opcode.to_bytes(2, 'big') + payload
+        else: return opcode.to_bytes(3, 'big') + payload

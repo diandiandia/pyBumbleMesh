@@ -12,7 +12,7 @@ class PBAdvLink:
     Highly Robust PB-ADV Link Layer.
     Optimized for Half-Duplex channel collision avoidance.
     """
-    RETRANSMIT_INTERVAL = 1.5
+    RETRANSMIT_INTERVAL = 2.0  # Slow and steady wins the race
     TRANSACTION_TIMEOUT = 30.0
 
     def __init__(self, link_id: int, send_pdu_cb: Callable[[bytes], any]):
@@ -30,10 +30,8 @@ class PBAdvLink:
         self.tx_lock = asyncio.Lock()
 
     async def _send_wrapper(self, pdu: bytes):
-        async with self.tx_lock:
-            res = self.send_pdu_cb(pdu)
-            if asyncio.iscoroutine(res): await res
-            await asyncio.sleep(0.01) # Shortest hardware gap
+        res = self.send_pdu_cb(pdu)
+        if asyncio.iscoroutine(res): await res
 
     async def open(self, device_uuid: bytes, timeout: float = 10.0):
         pdu = self.link_id.to_bytes(4, 'big') + b'\x00\x03' + device_uuid
@@ -53,20 +51,19 @@ class PBAdvLink:
         if link_id != self.link_id: return
         
         gpc_byte = pdu[5] if len(pdu) >= 6 else pdu[4]
-        if (gpc_byte & 0x03) == 0x03:
+        trans_num = pdu[4]
+
+        if (gpc_byte & 0x03) == 0x03: # Link Control
             if gpc_byte == 0x07: self.link_ack_received.set()
             elif gpc_byte == 0x0B: self.is_opened = False
             return
 
-        trans_num = pdu[4]
         is_ack = (gpc_byte & 0x03) == 0x01
         is_start = (gpc_byte & 0x03) == 0x00
         is_cont = (gpc_byte & 0x03) == 0x02
 
-        # --- MANDATORY COLLISION AVOIDANCE ---
-        # If we see ANY inbound data (START or CONT) from the peer, 
-        # it implies they have received our previous transaction.
-        # We MUST stop our retransmits immediately to clear the channel.
+        # --- COLLISION DETECTION ---
+        # If peer is sending something else, stop our own TX.
         if (is_start or is_cont) and trans_num != self.current_ack_id:
             if self.current_ack_id is not None:
                 self.trans_ack_received.set()
@@ -107,6 +104,7 @@ class PBAdvLink:
         fcs = crc8(pdu)
         size = len(pdu)
         
+        # --- BLUEZ COMPATIBILITY ---
         if size > 20:
             max_seg = 1 + ((size - 20 - 1) // 23)
             init_size = 20
@@ -137,10 +135,11 @@ class PBAdvLink:
             for seg in segments:
                 if self.trans_ack_received.is_set(): break
                 await self._send_wrapper(seg)
-                # Significant delay between segments to allow peer to interject and radio to listen
-                await asyncio.sleep(0.12) 
+                # Polite delay between segments (allow receiver to catch breath)
+                await asyncio.sleep(0.15) 
             
-            try: await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
+            # Silent gap after whole transaction to allow peer to talk
+            try: await asyncio.wait_for(self.trans_ack_received.wait(), 1.0)
             except asyncio.TimeoutError: continue
         
         success = self.trans_ack_received.is_set()
