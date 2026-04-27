@@ -138,7 +138,10 @@ class ProvisioningSession:
         self.shared_secret = self.local_key.dh(self.remote_public_key_x, self.remote_public_key_y)
         
         if self.auth_method != 0x00:
-            logger.info("Authentication Required. Waiting for User Input...")
+            print("\n" + "*"*40)
+            print("!!! AUTHENTICATION REQUIRED !!!")
+            print("*"*40 + "\n")
+            logger.info("Waiting for User Input...")
             self.state = ProvisioningState.AUTH_INPUT
             return None # Pause and wait for set_auth_value
         

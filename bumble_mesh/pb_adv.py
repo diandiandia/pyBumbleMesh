@@ -70,9 +70,8 @@ class PBAdvLink:
             self.trans_ack_received.set()
         elif is_start and trans_num != self.last_rx_trans_num:
             # It's a new inbound transaction, peer must have received our last one.
-            # Stop the loop but don't set trans_ack_received so send_transaction can return False or handle specially
-            pass 
-
+            if self.current_ack_id is not None:
+                self.trans_ack_received.set() # Stop our own retransmits
         if is_start: # START
             if trans_num == self.last_rx_trans_num:
                 self._send_trans_ack(trans_num) # Re-ACK duplicates
