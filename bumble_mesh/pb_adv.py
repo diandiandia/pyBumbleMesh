@@ -70,9 +70,8 @@ class PBAdvLink:
             self.trans_ack_received.set()
             return
 
-        # Stop our current TX if peer is sending DATA for a different transaction
-        if (is_start or is_cont) and self.current_ack_id is not None and trans_num != self.current_ack_id:
-            self.trans_ack_received.set()
+        # REMOVED: Flawed logic that stopped TX when peer started talking.
+        # We must finish our own segments to avoid "bad-pdu" on peer side.
 
         if is_start:
             seg_n = gpc_byte >> 2
@@ -93,11 +92,8 @@ class PBAdvLink:
             logger.info(f"PB-ADV RX Cont: Trans {trans_num:02x}, SegIdx {seg_idx}")
             self._send_trans_ack(trans_num)
             
-            # If we already have info (Start arrived before or retransmitted), check reassemble
-            if trans_num in self.rx_info:
-                self._check_and_reassemble(trans_num)
-            else:
-                logger.info(f"Waiting for Start segment for Trans {trans_num:02x}")
+            # Reassembly check is now safe even if Start hasn't arrived (it will just return)
+            self._check_and_reassemble(trans_num)
 
     def _check_and_reassemble(self, trans_id: int):
         if trans_id not in self.rx_info: return
