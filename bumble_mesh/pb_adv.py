@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 class PBAdvLink:
     """
     Highly Robust PB-ADV Link Layer.
-    Handles out-of-order segments and half-duplex collisions.
+    With detailed segment-level logging for debugging.
     """
     RETRANSMIT_INTERVAL = 1.0
     TRANSACTION_TIMEOUT = 30.0
@@ -25,15 +25,15 @@ class PBAdvLink:
         self.link_ack_received = asyncio.Event()
         self.trans_ack_received = asyncio.Event()
         self.current_ack_id: Optional[int] = None
-        self.rx_buffer: Dict[int, Dict[int, bytes]] = {} # {trans_num: {seg_idx: data}}
-        self.rx_info: Dict[int, Dict] = {} # {trans_num: {total_len, seg_n, fcs}}
+        self.rx_buffer: Dict[int, Dict[int, bytes]] = {} 
+        self.rx_info: Dict[int, Dict] = {} 
         self.tx_lock = asyncio.Lock()
 
     async def _send_wrapper(self, pdu: bytes):
         async with self.tx_lock:
             res = self.send_pdu_cb(pdu)
             if asyncio.iscoroutine(res): await res
-            await asyncio.sleep(0.01) # Min gap
+            await asyncio.sleep(0.01)
 
     async def open(self, device_uuid: bytes, timeout: float = 10.0):
         pdu = self.link_id.to_bytes(4, 'big') + b'\x00\x03' + device_uuid
@@ -64,27 +64,28 @@ class PBAdvLink:
         is_start = (gpc_byte & 0x03) == 0x00
         is_cont = (gpc_byte & 0x03) == 0x02
 
-        # COLLISION AVOIDANCE: If peer started a new transaction, stop ours.
+        # COLLISION AVOIDANCE
         if (is_start or is_cont) and trans_num != self.current_ack_id:
             if self.current_ack_id is not None: self.trans_ack_received.set()
 
         if is_ack and trans_num == self.current_ack_id:
             self.trans_ack_received.set()
         elif is_start:
+            seg_n = gpc_byte >> 2
+            total_len = int.from_bytes(pdu[6:8], 'big')
+            logger.debug(f"PB-ADV RX Start: Trans {trans_num:02x}, SegN {seg_n}, Total {total_len}")
+            
             if trans_num == self.last_rx_trans_num:
                 self._send_trans_ack(trans_num)
                 return
             self.last_rx_trans_num = trans_num
-            seg_n = gpc_byte >> 2
-            total_len = int.from_bytes(pdu[6:8], 'big')
-            fcs = pdu[8]
-            if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
-            self.rx_buffer[trans_num][0] = pdu[9:]
-            self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
+            self.rx_buffer[trans_num] = {0: pdu[9:]}
+            self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': pdu[8]}
             self._send_trans_ack(trans_num)
             self._check_and_reassemble(trans_num)
         elif is_cont:
             seg_idx = gpc_byte >> 2
+            logger.debug(f"PB-ADV RX Cont: Trans {trans_num:02x}, SegIdx {seg_idx}")
             if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
             self.rx_buffer[trans_num][seg_idx] = pdu[6:]
             self._check_and_reassemble(trans_num)
@@ -96,11 +97,11 @@ class PBAdvLink:
         if len(buffer) == info['seg_n'] + 1:
             full_pdu = b''.join(buffer[i] for i in range(info['seg_n'] + 1))[:info['total_len']]
             if crc8(full_pdu) == info['fcs']:
-                logger.info(f"PB-ADV RX Reassembled: Trans {trans_id:02x}, Len {len(full_pdu)}")
+                logger.info(f"PB-ADV Reassembled: Trans {trans_id:02x} ({len(full_pdu)} bytes)")
                 self._send_trans_ack(trans_id)
                 if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
             else:
-                logger.error(f"FCS Mismatch: Expected {info['fcs']:02x}, Got {crc8(full_pdu):02x}")
+                logger.error(f"FCS Mismatch Trans {trans_id:02x}")
             del self.rx_buffer[trans_id]
             del self.rx_info[trans_id]
 
@@ -109,7 +110,6 @@ class PBAdvLink:
         fcs = crc8(pdu)
         size = len(pdu)
         
-        # Segmenting logic (fixed 20/23 byte offsets)
         if size > 20:
             max_seg = 1 + ((size - 20 - 1) // 23)
             init_size = 20
@@ -131,7 +131,7 @@ class PBAdvLink:
             for seg in segments:
                 if self.trans_ack_received.is_set(): break
                 await self._send_wrapper(seg)
-                await asyncio.sleep(0.1) # Channel gap
+                await asyncio.sleep(0.1) 
             try: await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
             except asyncio.TimeoutError: continue
         

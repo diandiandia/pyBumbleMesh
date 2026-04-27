@@ -65,30 +65,28 @@ class MeshStack:
         self.provisioning_states[link_id] = session
         
         pdu_queue = asyncio.Queue()
+
         async def pdu_worker():
             while True:
                 pdu = await pdu_queue.get()
                 try:
                     if session.state in (ProvisioningState.FAILED, ProvisioningState.COMPLETE): break
+                    
                     resp = session.handle_pdu(pdu, net_key=self.net_key, iv_index=self.iv_index, unicast_address=next_addr)
                     
                     if resp:
-                        # CASE: We just handled CAPABILITIES -> We need START + our PUBKEY
-                        if resp[0] == 0x02:
-                            success = await pb_link.send_transaction(resp)
-                            if success:
-                                # BlueZ acceptor is aggressive. It shows PIN and sends PubKey NOW.
-                                # Trigger UI prompt immediately so user can start typing.
-                                session.trigger_auth_input()
-                                
-                                logger.info("START ACKed. Waiting for Peer Public Key in background...")
-                                # Give it some time to receive the PubKey segments
-                                await asyncio.sleep(2.0)
-                                
-                                # Now send our PubKey
-                                await pb_link.send_transaction(session.get_public_key_pdu())
-                        else:
-                            await pb_link.send_transaction(resp)
+                        # DECOUPLE: Handle PDU and return response. Sending is non-blocking to worker.
+                        async def send_follow_up(pdu_to_send):
+                            if pdu_to_send[0] == 0x02: # START
+                                success = await pb_link.send_transaction(pdu_to_send)
+                                if success:
+                                    session.trigger_auth_input()
+                                    await asyncio.sleep(2.0) # Background listen gap
+                                    await pb_link.send_transaction(session.get_public_key_pdu())
+                            else:
+                                await pb_link.send_transaction(pdu_to_send)
+                        
+                        asyncio.create_task(send_follow_up(resp))
 
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
@@ -100,26 +98,27 @@ class MeshStack:
 
         worker_task = asyncio.create_task(pdu_worker())
         pb_link.on_provisioning_pdu = lambda pdu: pdu_queue.put_nowait(pdu)
-        await pb_link.send_transaction(session.invite())
+        
+        # Start initial invite in background
+        asyncio.create_task(pb_link.send_transaction(session.invite()))
         await worker_task
 
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
         """Resumes a provisioning session after the user provides a numeric PIN."""
         for link_id, session in self.provisioning_states.items():
             if session.state == ProvisioningState.AUTH_INPUT:
-                # SAFETY: Wait for Peer's Public Key if it hasn't arrived yet
+                # SAFETY: Wait for Peer's Public Key (shared_secret is the flag)
                 wait_start = time.time()
                 while session.shared_secret is None:
-                    if time.time() - wait_start > 10.0:
+                    if time.time() - wait_start > 15.0:
                         logger.error("Timed out waiting for Peer Public Key.")
                         session.state = ProvisioningState.FAILED
                         return
                     await asyncio.sleep(0.5)
                 
-                logger.info("Peer Public Key available. Proceeding with Confirmation.")
+                logger.info("Peer Public Key received. Proceeding with AuthValue...")
                 session.set_auth_value(pin.to_bytes(16, 'big'))
                 confirm_pdu = session._send_confirm()
-                # Use create_task to avoid blocking the status check loop
                 asyncio.create_task(self.provisioning_sessions[link_id].send_transaction(confirm_pdu))
                 break
 
