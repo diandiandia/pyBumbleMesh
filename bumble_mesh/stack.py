@@ -96,6 +96,10 @@ class MeshStack:
         
         pb_link.on_provisioning_pdu = on_pdu
 
+        # --- RESTORED: Start the flow by sending Invite ---
+        invite_pdu = session.invite()
+        await pb_link.send_transaction(invite_pdu)
+
     async def resume_provisioning_with_pin(self, uuid: bytes, pin: int):
         """Resumes a provisioning session after the user provides a numeric PIN."""
         # Find the session
