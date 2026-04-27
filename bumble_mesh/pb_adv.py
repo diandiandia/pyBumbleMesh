@@ -12,7 +12,7 @@ class PBAdvLink:
     """
     Highly Robust PB-ADV Link Layer.
     - Fixes buffer wipe bug for out-of-order segments.
-    - Implements Random Backoff to avoid periodic collisions.
+    - Implements aggressive backoff to avoid half-duplex collisions.
     """
     TRANSACTION_TIMEOUT = 30.0
 
@@ -26,8 +26,8 @@ class PBAdvLink:
         self.link_ack_received = asyncio.Event()
         self.trans_ack_received = asyncio.Event()
         self.current_ack_id: Optional[int] = None
-        self.rx_buffer: Dict[int, Dict[int, bytes]] = {} 
-        self.rx_info: Dict[int, Dict] = {} 
+        self.rx_buffer: Dict[int, Dict[int, bytes]] = {} # {trans_num: {seg_idx: data}}
+        self.rx_info: Dict[int, Dict] = {} # {trans_num: {total_len, seg_n, fcs}}
         self.tx_lock = asyncio.Lock()
 
     async def _send_wrapper(self, pdu: bytes):
@@ -69,7 +69,7 @@ class PBAdvLink:
             self.trans_ack_received.set()
             return
 
-        # If it's a DATA packet for a NEW transaction, stop our current TX
+        # Stop our current TX if peer is sending DATA for a different transaction
         if (is_start or is_cont) and self.current_ack_id is not None and trans_num != self.current_ack_id:
             self.trans_ack_received.set()
 
@@ -79,7 +79,7 @@ class PBAdvLink:
             fcs = pdu[8]
             
             if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
-            self.rx_buffer[trans_num][0] = pdu[9:]
+            self.rx_buffer[trans_num][0] = pdu[9:] # Segment 0
             self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
             
             logger.info(f"PB-ADV RX Start: Trans {trans_num:02x}, SegN {seg_n}")
@@ -90,23 +90,27 @@ class PBAdvLink:
             if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
             self.rx_buffer[trans_num][seg_idx] = pdu[6:]
             logger.info(f"PB-ADV RX Cont: Trans {trans_num:02x}, SegIdx {seg_idx}")
+            self._send_trans_ack(trans_num) # BlueZ 5.86 expects ACK for EVERY segment
             self._check_and_reassemble(trans_num)
 
     def _check_and_reassemble(self, trans_id: int):
         if trans_id not in self.rx_info: return
         info = self.rx_info[trans_id]
         buffer = self.rx_buffer[trans_id]
-        if len(buffer) == info['seg_n'] + 1:
-            full_pdu = b''.join(buffer[i] for i in range(info['seg_n'] + 1))[:info['total_len']]
-            if crc8(full_pdu) == info['fcs']:
-                logger.info(f"PB-ADV Reassembled: Trans {trans_id:02x} ({len(full_pdu)} bytes)")
-                self._send_trans_ack(trans_id)
-                if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
-                # Cleanup
-                del self.rx_buffer[trans_id]
-                del self.rx_info[trans_id]
-            else:
-                logger.error(f"FCS Mismatch Trans {trans_id:02x}")
+        
+        missing = [i for i in range(info['seg_n'] + 1) if i not in buffer]
+        if missing:
+            logger.info(f"PB-ADV Trans {trans_id:02x} progress: {len(buffer)}/{info['seg_n']+1}. Missing: {missing}")
+            return
+
+        full_pdu = b''.join(buffer[i] for i in range(info['seg_n'] + 1))[:info['total_len']]
+        if crc8(full_pdu) == info['fcs']:
+            logger.info(f"PB-ADV Reassembled: Trans {trans_id:02x} ({len(full_pdu)} bytes)")
+            if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
+            del self.rx_buffer[trans_id]
+            del self.rx_info[trans_id]
+        else:
+            logger.error(f"FCS Mismatch Trans {trans_id:02x}")
 
     async def send_transaction(self, pdu: bytes) -> bool:
         self.local_trans_num = (self.local_trans_num + 1) % 256
@@ -134,11 +138,9 @@ class PBAdvLink:
             for seg in segments:
                 if self.trans_ack_received.is_set(): break
                 await self._send_wrapper(seg)
-                await asyncio.sleep(0.1) 
+                await asyncio.sleep(0.12) # Gap for radio listening
             
-            # --- RANDOM BACKOFF ---
-            # Wait for ACK with a random jitter to avoid persistent collisions
-            wait_time = 0.8 + random.random() * 0.7 # 0.8s to 1.5s
+            wait_time = 0.8 + random.random() * 0.7
             try: await asyncio.wait_for(self.trans_ack_received.wait(), wait_time)
             except asyncio.TimeoutError: continue
         
