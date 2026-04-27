@@ -86,11 +86,11 @@ class ProvisioningSession:
         self.payload_capabilities = pdu[1:]
         
         # Capability Mapping (Simplified for BlueZ test-mesh)
-        # BlueZ test-mesh usually has OutputNumeric (Action 0x02)
+        # BlueZ test-mesh usually has OutputNumeric (Bit 3, Action 0x0008)
         output_size = self.payload_capabilities[5]
         output_action = int.from_bytes(self.payload_capabilities[6:8], 'big')
         
-        if output_size > 0 and (output_action & 0x02):
+        if output_size > 0 and (output_action & 0x08):
             logger.info(f"Device supports OutputNumeric OOB (Size: {output_size})")
             self.auth_method = 0x02 # Output OOB
             self.auth_action = 0x02 # Output Numeric

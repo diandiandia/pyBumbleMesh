@@ -58,7 +58,7 @@ class AdvBearer:
             
             if ad_type in (0x29, 0x2A, 0x2B):
                 if ad_type == 0x29:
-                    logger.info(f"PB-ADV RX: {address} | Data: {payload.hex()}")
+                    logger.debug(f"PB-ADV RX: {address} | Data: {payload.hex()}")
                 else:
                     logger.debug(f"MESH RX: {address} | Type: 0x{ad_type:02X} | Data: {payload.hex()}")
 
@@ -76,11 +76,14 @@ class AdvBearer:
 
     async def send_pdu(self, pdu: bytes, is_pb_adv: bool = True):
         async with self.tx_lock:
-            # NO FLAGS - ONLY MESH AD STRUCTURE (Required for 24-byte MTU alignment)
+            # PB-ADV / Mesh PDU wrapping
             ad_type = 0x29 if is_pb_adv else 0x2A
             ad_data = bytes([len(pdu) + 1, ad_type]) + pdu
             
+            # Efficient toggle (BlueZ is sensitive to this timing)
             await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=0))
             await self.device.host.send_command(HCI_LE_Set_Advertising_Data_Command(advertising_data=ad_data))
             await self.device.host.send_command(HCI_LE_Set_Advertising_Enable_Command(advertising_enable=1))
-            await asyncio.sleep(0.05)
+            
+            # Shorter sleep to improve throughput while keeping HCI happy
+            await asyncio.sleep(0.02)
