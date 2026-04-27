@@ -71,11 +71,12 @@ class PBAdvLink:
             return
 
         # SMART EVASION: If we are TX-ing but receive ANY data from the peer,
-        # it means they either got our message and are replying, or there's a collision.
-        # Stop our TX immediately to listen to their message.
+        # stop our current burst to avoid colliding with their remaining segments.
         if (is_start or is_cont) and self.current_ack_id is not None:
-            logger.info(f"Peer traffic detected (Trans {trans_num:02x}). Easing off local TX.")
-            self.trans_ack_received.set()
+            if not self.trans_ack_received.is_set():
+                logger.info(f"Peer traffic detected (Trans {trans_num:02x}). Easing off to listen...")
+                self.trans_ack_received.set()
+                self.last_rx_trans_num = -1 # Special flag: Interrupted by peer
 
         if is_start:
             seg_n = gpc_byte >> 2
@@ -87,14 +88,14 @@ class PBAdvLink:
             self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
             
             logger.info(f"PB-ADV RX Start: Trans {trans_num:02x}, SegN {seg_n}")
-            self._send_trans_ack(trans_num)
+            # REMOVED: Immediate ACK here. We wait for reassembly.
             self._check_and_reassemble(trans_num)
         elif is_cont:
             seg_idx = gpc_byte >> 2
             if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
             self.rx_buffer[trans_num][seg_idx] = pdu[6:]
             logger.info(f"PB-ADV RX Cont: Trans {trans_num:02x}, SegIdx {seg_idx}")
-            self._send_trans_ack(trans_num)
+            # REMOVED: Immediate ACK here. We wait for reassembly.
             
             # Reassembly check is now safe even if Start hasn't arrived (it will just return)
             self._check_and_reassemble(trans_num)
@@ -106,12 +107,14 @@ class PBAdvLink:
         
         missing = [i for i in range(info['seg_n'] + 1) if i not in buffer]
         if missing:
+            # We don't ACK yet, wait for sender to retransmit missing pieces
             logger.info(f"PB-ADV Trans {trans_id:02x} progress: {len(buffer)}/{info['seg_n']+1}. Missing: {missing}")
             return
 
         full_pdu = b''.join(buffer[i] for i in range(info['seg_n'] + 1))[:info['total_len']]
         if crc8(full_pdu) == info['fcs']:
             logger.info(f"PB-ADV Reassembled: Trans {trans_id:02x} ({len(full_pdu)} bytes)")
+            self._send_trans_ack(trans_id) # NOW we acknowledge the whole transaction
             if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
             del self.rx_buffer[trans_id]
             del self.rx_info[trans_id]
@@ -142,12 +145,25 @@ class PBAdvLink:
             
             while not self.trans_ack_received.is_set():
                 if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
-                for seg in segments:
-                    if self.trans_ack_received.is_set(): break
-                    await self._send_wrapper(seg)
-                    await asyncio.sleep(0.15) # Increased from 0.12 to 0.15 for reliability
                 
-                wait_time = 1.0 + random.random() * 0.8 # Slightly longer wait
+                interrupted = False
+                for seg in segments:
+                    if self.trans_ack_received.is_set():
+                        if self.last_rx_trans_num == -1: # Interrupted flag
+                            interrupted = True
+                        break
+                    await self._send_wrapper(seg)
+                    await asyncio.sleep(0.15)
+                
+                if interrupted:
+                    # Backoff and retry later
+                    logger.info(f"Transaction {self.local_trans_num} was interrupted by peer. Backing off 1.5s...")
+                    self.trans_ack_received.clear()
+                    self.last_rx_trans_num = None
+                    await asyncio.sleep(1.5)
+                    continue
+
+                wait_time = 1.0 + random.random() * 0.8
                 try: await asyncio.wait_for(self.trans_ack_received.wait(), wait_time)
                 except asyncio.TimeoutError: continue
             

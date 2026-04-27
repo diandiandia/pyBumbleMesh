@@ -124,12 +124,16 @@ class MeshStack:
                     await asyncio.sleep(0.5)
                 
                 logger.info("Keys ready. Sending Input Complete and Confirmation.")
+                auth_val_hex = pin.to_bytes(16, 'big').hex()
+                logger.info(f"[UI] Calculated AuthValue for PIN {pin}: {auth_val_hex}")
                 session.set_auth_value(pin.to_bytes(16, 'big'))
                 
                 async def do_resume():
                     # 1. Send Input Complete (Required for Output OOB)
+                    logger.info("TX: Provisioning Input Complete (0x04)")
                     await self.provisioning_sessions[link_id].send_transaction(b'\x04')
                     # 2. Send Provisioning Confirm
+                    logger.info("TX: Provisioning Confirm (0x05)")
                     await self.provisioning_sessions[link_id].send_transaction(session._send_confirm())
                 
                 asyncio.create_task(do_resume())
