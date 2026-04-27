@@ -60,27 +60,28 @@ class PBAdvLink:
 
         trans_num = pdu[4]
         
-        # --- PREEMPTIVE STOP ---
-        # If we see ANY new transaction number from the peer, it implies they received 
-        # our last transaction (if any). Stop our retransmits to clear the channel.
-        if (gpc_byte & 0x03) == 0x00: # START of a new inbound transaction
-            if self.current_ack_id is not None and trans_num != self.current_ack_id:
+        # --- AGGRESSIVE PREEMPTIVE STOP ---
+        # If we receive ANY PDU that is not an ACK for our current transaction,
+        # it means the peer is trying to send us something or has moved on.
+        # Stop our own retransmits immediately to prevent collisions.
+        is_ack = (gpc_byte & 0x03) == 0x01
+        if not (is_ack and trans_num == self.current_ack_id):
+            if self.current_ack_id is not None:
                 self.trans_ack_received.set()
 
-        if (pdu[5] & 0x03) == 0x01: # ACK
+        if is_ack: # ACK
             if trans_num == self.current_ack_id: self.trans_ack_received.set()
-        elif (pdu[5] & 0x03) == 0x00: # START
-            seg_n = pdu[5] >> 2
+        elif (gpc_byte & 0x03) == 0x00: # START
+            seg_n = gpc_byte >> 2
             total_len = int.from_bytes(pdu[6:8], 'big')
             fcs = pdu[8]
             self.rx_buffer[trans_num] = {0: pdu[9:]}
             self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
             self._check_and_reassemble(trans_num)
-            # BlueZ expects an ACK for START to stop its retransmits
             self._send_trans_ack(trans_num)
-        elif (pdu[5] & 0x03) == 0x02: # CONT
+        elif (gpc_byte & 0x03) == 0x02: # CONT
             if trans_num in self.rx_buffer:
-                self.rx_buffer[trans_num][pdu[5] >> 2] = pdu[6:]
+                self.rx_buffer[trans_num][gpc_byte >> 2] = pdu[6:]
                 self._check_and_reassemble(trans_num)
 
     def _check_and_reassemble(self, trans_id: int):
