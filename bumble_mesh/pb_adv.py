@@ -2,6 +2,7 @@ import asyncio
 import logging
 import math
 import time
+import random
 from typing import Optional, Callable, Dict, List
 from .crypto import crc8
 
@@ -10,9 +11,9 @@ logger = logging.getLogger(__name__)
 class PBAdvLink:
     """
     Highly Robust PB-ADV Link Layer.
-    Optimized for visibility and reliability.
+    - Fixes buffer wipe bug for out-of-order segments.
+    - Implements Random Backoff to avoid periodic collisions.
     """
-    RETRANSMIT_INTERVAL = 1.0
     TRANSACTION_TIMEOUT = 30.0
 
     def __init__(self, link_id: int, send_pdu_cb: Callable[[bytes], any]):
@@ -64,27 +65,31 @@ class PBAdvLink:
         is_start = (gpc_byte & 0x03) == 0x00
         is_cont = (gpc_byte & 0x03) == 0x02
 
-        if (is_start or is_cont) and trans_num != self.current_ack_id:
-            if self.current_ack_id is not None: self.trans_ack_received.set()
-
         if is_ack and trans_num == self.current_ack_id:
             self.trans_ack_received.set()
-        elif is_start:
+            return
+
+        # If it's a DATA packet for a NEW transaction, stop our current TX
+        if (is_start or is_cont) and self.current_ack_id is not None and trans_num != self.current_ack_id:
+            self.trans_ack_received.set()
+
+        if is_start:
             seg_n = gpc_byte >> 2
+            total_len = int.from_bytes(pdu[6:8], 'big')
+            fcs = pdu[8]
+            
+            if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
+            self.rx_buffer[trans_num][0] = pdu[9:]
+            self.rx_info[trans_num] = {'total_len': total_len, 'seg_n': seg_n, 'fcs': fcs}
+            
             logger.info(f"PB-ADV RX Start: Trans {trans_num:02x}, SegN {seg_n}")
-            if trans_num == self.last_rx_trans_num:
-                self._send_trans_ack(trans_num)
-                return
-            self.last_rx_trans_num = trans_num
-            self.rx_buffer[trans_num] = {0: pdu[9:]}
-            self.rx_info[trans_num] = {'total_len': int.from_bytes(pdu[6:8], 'big'), 'seg_n': seg_n, 'fcs': pdu[8]}
             self._send_trans_ack(trans_num)
             self._check_and_reassemble(trans_num)
         elif is_cont:
             seg_idx = gpc_byte >> 2
-            logger.info(f"PB-ADV RX Cont: Trans {trans_num:02x}, SegIdx {seg_idx}")
             if trans_num not in self.rx_buffer: self.rx_buffer[trans_num] = {}
             self.rx_buffer[trans_num][seg_idx] = pdu[6:]
+            logger.info(f"PB-ADV RX Cont: Trans {trans_num:02x}, SegIdx {seg_idx}")
             self._check_and_reassemble(trans_num)
 
     def _check_and_reassemble(self, trans_id: int):
@@ -97,10 +102,11 @@ class PBAdvLink:
                 logger.info(f"PB-ADV Reassembled: Trans {trans_id:02x} ({len(full_pdu)} bytes)")
                 self._send_trans_ack(trans_id)
                 if self.on_provisioning_pdu: self.on_provisioning_pdu(full_pdu)
+                # Cleanup
+                del self.rx_buffer[trans_id]
+                del self.rx_info[trans_id]
             else:
                 logger.error(f"FCS Mismatch Trans {trans_id:02x}")
-            del self.rx_buffer[trans_id]
-            del self.rx_info[trans_id]
 
     async def send_transaction(self, pdu: bytes) -> bool:
         self.local_trans_num = (self.local_trans_num + 1) % 256
@@ -121,15 +127,19 @@ class PBAdvLink:
         self.current_ack_id = self.local_trans_num
         self.trans_ack_received.clear()
         start_time = time.time()
-        logger.info(f"TX Trans {self.local_trans_num} (Type: {pdu[0]:02x}, Size: {size})")
+        logger.info(f"TX Trans {self.local_trans_num} (Type: {pdu[0]:02x}, Size: {size}, Segs: {len(segments)})")
         
         while not self.trans_ack_received.is_set():
             if time.time() - start_time > self.TRANSACTION_TIMEOUT: break
             for seg in segments:
                 if self.trans_ack_received.is_set(): break
                 await self._send_wrapper(seg)
-                await asyncio.sleep(0.08) 
-            try: await asyncio.wait_for(self.trans_ack_received.wait(), self.RETRANSMIT_INTERVAL)
+                await asyncio.sleep(0.1) 
+            
+            # --- RANDOM BACKOFF ---
+            # Wait for ACK with a random jitter to avoid persistent collisions
+            wait_time = 0.8 + random.random() * 0.7 # 0.8s to 1.5s
+            try: await asyncio.wait_for(self.trans_ack_received.wait(), wait_time)
             except asyncio.TimeoutError: continue
         
         success = self.trans_ack_received.is_set()
