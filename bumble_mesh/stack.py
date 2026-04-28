@@ -214,9 +214,14 @@ class MeshStack:
             if link_id in self.provisioning_sessions:
                 self.provisioning_sessions[link_id].handle_pdu(pdu)
                 return
+        
         result = self.network.decrypt_pdu(pdu)
-        if not result: return
+        if not result:
+            return
+        
         src, dst, seq, transport_pdu_raw = result
+        print(f" [RX 网络层] 解密成功: 来自=0x{src:04x} 目标=0x{dst:04x} SEQ={seq}")
+
         res = self.transport.assemble_pdu(src, transport_pdu_raw, seq=seq)
         if not res: return
         full_pdu, akf_or_ctl, seq_auth, block = res
@@ -230,7 +235,11 @@ class MeshStack:
         # Decrypt based on AKF bit from the PDU
         # Config messages (akf_or_ctl=0) use DevKey, others use AppKey
         access_pdu = self.upper_transport.decrypt(src, dst, seq_auth, self.network.iv_index, full_pdu, akf=akf_or_ctl, aid=0)
-        if access_pdu: self.access.handle_pdu(src, dst, 0, access_pdu)
+        if access_pdu:
+            print(f" [RX 传输层] 业务数据解密成功: {access_pdu.hex()}")
+            self.access.handle_pdu(src, dst, 0, access_pdu)
+        else:
+            print(f" [RX 传输层] 解密失败 (可能 Key 不匹配)")
 
     async def _send_control_message(self, dst: int, payload: bytes):
         # Control messages (CTL=1) have a different MIC length and Nonce
