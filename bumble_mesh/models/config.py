@@ -143,9 +143,11 @@ class ConfigClient(Model):
 
     def model_app_bind(self, element_addr: int, app_key_index: int, model_id: int):
         # Opcode 0x803D
+        # SIG models use 2-byte IDs, vendor models use 4-byte IDs
+        id_bytes = model_id.to_bytes(4, 'little') if model_id > 0xFFFF else model_id.to_bytes(2, 'little')
         payload = element_addr.to_bytes(2, 'little') + \
                   app_key_index.to_bytes(2, 'little') + \
-                  model_id.to_bytes(2, 'little')
+                  id_bytes
         return 0x803D, payload
 
     def model_publication_set(self, element_addr: int, publish_addr: int, app_key_index: int, model_id: int, ttl: int = 7):
