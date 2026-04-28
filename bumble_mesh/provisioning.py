@@ -168,6 +168,9 @@ class ProvisioningSession:
         session_nonce = k1(self.shared_secret, final_salt, b"prsn")[3:16]
         self.dev_key = k1(self.shared_secret, final_salt, b"prdk")
         logger.info(f"DevKey derived successfully.")
+        logger.info(f"[DEBUG] SharedSecret: {self.shared_secret.hex()}")
+        logger.info(f"[DEBUG] FinalSalt: {final_salt.hex()}")
+        logger.info(f"[DEBUG] DevKey: {self.dev_key.hex()}")
         
         # 4. Prepare and Encrypt Provisioning Data
         prov_data = net_key + b'\x00\x00' + b'\x00' + iv_index.to_bytes(4, 'big') + unicast_address.to_bytes(2, 'big')
