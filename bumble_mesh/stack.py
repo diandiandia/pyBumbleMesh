@@ -177,9 +177,10 @@ class MeshStack:
                         async def finalize_and_configure():
                             # 1. 显式关闭 PB-ADV 链路 (让 BlueZ 完成身份切换)
                             await pb_link.close()
-                            # 2. 给予充足的初始化时间 (2秒)
-                            logger.info(f"Waiting 2 seconds for node {next_addr:04x} to finalize initialization...")
-                            await asyncio.sleep(2.0)
+                            # 2. 给予充足的初始化时间 (增加到 5 秒)
+                            # BlueZ 在 Link Close 后会进行大量的 Flash 写入和 Beacon 初始化
+                            logger.info(f"Waiting 5 seconds for node {next_addr:04x} to finalize initialization...")
+                            await asyncio.sleep(5.0)
                             # 3. 启动配置流
                             await self.config_manager.configure_node(next_addr, 0, b'\x02'*16)
                         
@@ -210,10 +211,10 @@ class MeshStack:
                 session.set_auth_value(pin.to_bytes(16, 'big'))
                 
                 async def do_resume():
-                    # 1. Send Input Complete (Required for Output OOB)
-                    logger.info("TX: Provisioning Input Complete (0x04)")
-                    await self.provisioning_sessions[link_id].send_transaction(b'\x04')
-                    # 2. Send Provisioning Confirm
+                    # Note: Input Complete (0x04) is ONLY sent by the Device to the Provisioner.
+                    # We are the Provisioner, so we skip it and go straight to Confirm.
+                    
+                    # 1. Send Provisioning Confirm
                     logger.info("TX: Provisioning Confirm (0x05)")
                     await self.provisioning_sessions[link_id].send_transaction(session._send_confirm())
                 
