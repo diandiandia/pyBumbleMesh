@@ -1,7 +1,16 @@
 import logging
-from .crypto import aes_ccm_decrypt, aes_ccm_encrypt
+from .crypto import aes_ccm_decrypt, aes_ccm_encrypt, k2
 
 logger = logging.getLogger(__name__)
+
+
+def calc_aid(app_key: bytes) -> int:
+    """Calculate the Application Key Identifier (AID) from an AppKey.
+    The AID is the least significant 6 bits of k2(AppKey, '00')[0].
+    Per Mesh Profile Spec v1.0.1 Section 4.2.6.
+    """
+    aid, _, _ = k2(app_key, b'\x00')
+    return aid & 0x3F
 
 class UpperTransportLayer:
     """
@@ -11,6 +20,7 @@ class UpperTransportLayer:
     def __init__(self):
         self.app_keys: dict[int, bytes] = {} # index -> key
         self.dev_keys: dict[int, bytes] = {} # address -> key
+        self.app_key_aids: dict[int, int] = {} # index -> aid (learned from peer)
 
     def add_app_key(self, index: int, key: bytes):
         self.app_keys[index] = key
@@ -77,7 +87,15 @@ class UpperTransportLayer:
             return None
 
         try:
-            return aes_ccm_decrypt(key, nonce, transport_pdu, b'', mic_len)
+            result = aes_ccm_decrypt(key, nonce, transport_pdu, b'', mic_len)
+            # Learn AID from the first AppKey that matches
+            if akf == 1 and key is not None:
+                for idx, k in self.app_keys.items():
+                    if k == key:
+                        peer_aid = aid & 0x3F  # Extract AID from the 7-bit key_aid
+                        self.app_key_aids[idx] = peer_aid
+                        break
+            return result
         except Exception as e:
             logger.debug(f"Upper Transport Decryption Failed: {e}")
             return None
