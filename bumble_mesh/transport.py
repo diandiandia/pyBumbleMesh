@@ -25,7 +25,7 @@ class LowerTransportLayer:
             segments = []
             seg_n = math.ceil(len(pdu) / 12) - 1
             seq_zero = seq & 0x1FFF
-            aszmic = 1 if akf == 0 else 0 # Device key messages use 64-bit MIC
+            aszmic = 0  # Match encrypt(): always use 4-byte MIC (ASZMIC=0)
             
             for i in range(seg_n + 1):
                 h0 = 0x80 | ((akf & 1) << 6) | (aid & 0x3F)
@@ -58,9 +58,8 @@ class LowerTransportLayer:
         akf = (pdu[0] >> 6) & 1
         
         if not is_segmented:
-            # Unsegmented: SeqAuth is just the current seq
-            # Note: For AKF=0, Spec says MIC is always 64 bits (8 bytes), so ASZMIC=1
-            aszmic = 1 if akf == 0 else 0
+            # Unsegmented: Always 4-byte MIC (ASZMIC=0), matching encrypt()
+            aszmic = 0
             return pdu[1:], akf, seq, 0, aszmic
         
         if len(pdu) < 4: return None
