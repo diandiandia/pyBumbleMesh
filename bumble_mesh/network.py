@@ -24,8 +24,9 @@ class NetworkLayer:
         
         header = bytes([ivi_nid, ctl_ttl]) + seq_bytes + src_bytes + dst_bytes
         
-        # Nonce: 0x01 || CTL_TTL || SEQ || SRC || Pad(2) || IV Index (4)
-        nonce = bytes([0x01, ctl_ttl]) + seq_bytes + src_bytes + b'\x00\x00' + self.iv_index.to_bytes(4, 'big')
+        # Nonce: 0x00 || CTL_TTL || SEQ || SRC || Pad(2) || IV Index (4)
+        # Mesh Profile Spec v1.0.1 Section 3.8.4.2: Network Nonce type = 0x00
+        nonce = bytes([0x00, ctl_ttl]) + seq_bytes + src_bytes + b'\x00\x00' + self.iv_index.to_bytes(4, 'big')
         
         mic_len = 8 if ctl else 4
         encrypted_payload = aes_ccm_encrypt(self.encryption_key, nonce, transport_pdu, b'', mic_len)
@@ -75,7 +76,7 @@ class NetworkLayer:
         dst = int.from_bytes(dst_bytes, 'big')
         seq = int.from_bytes(seq_bytes, 'big')
         
-        nonce = bytes([0x01, ctl_ttl]) + seq_bytes + src_bytes + b'\x00\x00' + self.iv_index.to_bytes(4, 'big')
+        nonce = bytes([0x00, ctl_ttl]) + seq_bytes + src_bytes + b'\x00\x00' + self.iv_index.to_bytes(4, 'big')
         
         mic_len = 8 if ctl else 4
         try:
