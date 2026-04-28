@@ -84,7 +84,37 @@ class MeshConfigManager:
                 else:
                     logger.warning(f"  AppKey Add Attempt {attempt} timed out. Retrying...")
 
-        # 3. Model App Bind (Bind all discovered SIG models)
+        # 3. Send AppKey to ourselves (gateway) so that bluetooth-meshd knows it too
+        logger.info("[2.5/3] Sending AppKey to gateway (0x%04x)...", self.stack.unicast_address)
+        ack_event = asyncio.Event()
+
+        def on_gw_ack_status(src, status, index):
+            if src == self.stack.unicast_address and index == app_key_index:
+                if status == 0:
+                    logger.info("Gateway AppKey Added Successfully")
+                else:
+                    logger.error(f"Gateway AppKey Add Failed with status {status}")
+                ack_event.set()
+
+        self.config_client.on_appkey_status = on_gw_ack_status
+        opcode, payload = self.config_client.appkey_add(0, app_key_index, app_key)
+
+        for attempt in range(1, 6):
+            jitter = random.uniform(0.5, 2.0)
+            logger.info(f"  Gateway AppKey Add Attempt {attempt}/5 (jitter {jitter:.1f}s)...")
+            await asyncio.sleep(jitter)
+            ack_event.clear()
+            await self.stack.send_model_message(self.stack.unicast_address, self.config_client, opcode, payload)
+            try:
+                await asyncio.wait_for(ack_event.wait(), timeout=5.0)
+                break
+            except asyncio.TimeoutError:
+                if attempt == 3:
+                    logger.warning("Gateway AppKey Add final timeout (continuing anyway)")
+                else:
+                    logger.warning(f"  Gateway AppKey Add Attempt {attempt} timed out. Retrying...")
+
+        # 4. Model App Bind (Bind all discovered SIG models)
         logger.info("[3/3] Binding discovered SIG models to AppKey...")
         models = self.stack.storage.get_node_models(node_addr)
         for m in models:
