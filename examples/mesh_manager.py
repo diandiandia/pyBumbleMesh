@@ -210,7 +210,7 @@ async def main():
         await device.power_on()
         
         # 初始化
-        net_key = b'\x01' * 16
+        net_key = b'\x00' * 16
         stack = MeshStack(device, net_key, 0x0001)
         await stack.start()
         
