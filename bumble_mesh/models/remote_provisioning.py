@@ -35,9 +35,9 @@ class RemoteProvisioningClient(Model):
             self.on_pdu_outbound_report(src, count)
 
     def _handle_scan_status(self, src, payload):
-        status = payload[0]
-        scan_limit = payload[1]
-        timeout = payload[2]
+        status = payload[0] if len(payload) > 0 else 0
+        scan_limit = payload[1] if len(payload) > 1 else 0
+        timeout = payload[2] if len(payload) > 2 else 0
         logger.info(f"Remote Scan Status from {src:04x}: Status={status}, Limit={scan_limit}, Timeout={timeout}")
 
     def _handle_scan_report(self, src, payload):
