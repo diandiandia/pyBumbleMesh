@@ -35,15 +35,17 @@ def main():
     
     # 2. LE Set Advertising Parameters
     # OGF=0x08 (LE Controller), OCF=0x0006 (LE Set Advertising Parameters)
-    adv_params = struct.pack('<HHBBBBBB',
-        0x0800,  # min interval (0x0800 = 1.28s)
-        0x0800,  # max interval
-        0x00,    # adv type: ADV_IND (connectable)
-        0x00,    # own address type: public
-        0x00,    # peer address type
-        *[0]*6,  # peer address (any)
-        0x07,    # channel map: all 3 channels
-        0x00     # filter policy
+    # Format: interval_min(2), interval_max(2), adv_type(1), own_addr_type(1),
+    #         peer_addr_type(1), peer_addr(6), channel_map(1), filter_policy(1)
+    # Total: 15 bytes of parameters
+    adv_params = (
+        struct.pack('<HH', 0x0800, 0x0800) +  # min/max interval
+        bytes([0x00]) +  # adv_type: ADV_NONCONN_IND
+        bytes([0x00]) +  # own_addr_type: public
+        bytes([0x00]) +  # peer_addr_type
+        b'\x00\x00\x00\x00\x00\x00' +  # peer_addr (6 bytes, any)
+        bytes([0x07]) +  # channel_map
+        bytes([0x00])    # filter_policy
     )
     cmd = hci_cmd(0x08, 0x0006, adv_params)
     sock.send(cmd)
