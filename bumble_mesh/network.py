@@ -27,14 +27,15 @@ class NetworkLayer:
         mic_len = 8 if ctl else 4
         encrypted_payload = aes_ccm_encrypt(self.encryption_key, nonce, transport_pdu, b'', mic_len)
         
-        # Obfuscation
-        # Privacy Random: DST || Encrypted Payload[0:3]
-        privacy_random = dst_bytes + encrypted_payload[:3]
+        # Obfuscation (Mesh Spec v1.0.1 Section 3.8.4.3)
+        # Privacy Random = DST || Encrypted Payload[0:5]
+        privacy_random = dst_bytes + encrypted_payload[:5]
         iv_index_bytes = self.iv_index.to_bytes(4, 'big')
         
         cipher = Cipher(algorithms.AES(self.privacy_key), modes.ECB(), backend=default_backend())
         encryptor = cipher.encryptor()
-        pecb = encryptor.update(b'\x00' * 5 + iv_index_bytes + privacy_random)
+        # pecb = e(PrivacyKey, 0x0000000000 || IV Index || Privacy Random)
+        pecb = encryptor.update(b'\x00' * 5 + iv_index_bytes + privacy_random) + encryptor.finalize()
         
         # Obfuscate CTL_TTL (1) + SEQ (3) + SRC (2) = 6 bytes
         obfuscated = bytes([a ^ b for a, b in zip(header[1:7], pecb[:6])])
@@ -53,11 +54,12 @@ class NetworkLayer:
         # De-obfuscate
         dst_bytes = pdu[7:9]
         encrypted_payload = pdu[9:]
-        privacy_random = dst_bytes + encrypted_payload[:3]
+        # Privacy Random for decryption is also DST || EncryptedPayload[:5]
+        privacy_random = dst_bytes + encrypted_payload[:5]
         
         cipher = Cipher(algorithms.AES(self.privacy_key), modes.ECB(), backend=default_backend())
         encryptor = cipher.encryptor()
-        pecb = encryptor.update(b'\x00' * 5 + self.iv_index.to_bytes(4, 'big') + privacy_random)
+        pecb = encryptor.update(b'\x00' * 5 + self.iv_index.to_bytes(4, 'big') + privacy_random) + encryptor.finalize()
         
         deobfuscated = bytes([a ^ b for a, b in zip(pdu[1:7], pecb[:6])])
         
