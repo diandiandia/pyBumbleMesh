@@ -1,7 +1,10 @@
+import logging
 from .crypto import aes_ccm_encrypt, aes_ccm_decrypt, k2
 from typing import Optional
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
+
+logger = logging.getLogger(__name__)
 
 class NetworkLayer:
     def __init__(self, net_key: bytes, iv_index: int):
@@ -41,7 +44,7 @@ class NetworkLayer:
         obfuscated = bytes([a ^ b for a, b in zip(header[1:7], pecb[:6])])
         
         pdu = bytes([header[0]]) + obfuscated + header[7:9] + encrypted_payload
-        print(f" [TX 网络层] 正在发送: SRC=0x{src:04x} DST=0x{dst:04x} SEQ={self.seq} CTL={ctl}")
+        logger.debug(f"[TX 网络层] SRC=0x{src:04x} DST=0x{dst:04x} SEQ={self.seq} CTL={ctl} PDU={pdu.hex()}")
         self.seq += 1
         return pdu
 
@@ -77,7 +80,7 @@ class NetworkLayer:
         mic_len = 8 if ctl else 4
         try:
             transport_pdu = aes_ccm_decrypt(self.encryption_key, nonce, encrypted_payload, b'', mic_len)
-            print(f" [RX 网络层] 解密成功: 来自=0x{src:04x} 目标=0x{dst:04x} SEQ={seq} CTL={ctl}")
+            logger.debug(f"[RX 网络层] 解密成功: 来自=0x{src:04x} 目标=0x{dst:04x} SEQ={seq} CTL={ctl} PDU={pdu.hex()}")
             return src, dst, seq, transport_pdu, ctl
         except Exception:
             return None
