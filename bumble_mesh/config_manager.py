@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 from typing import Dict, List
 from .models.config import ConfigClient
 
@@ -67,8 +68,11 @@ class MeshConfigManager:
         self.config_client.on_appkey_status = on_ack_status
         opcode, payload = self.config_client.appkey_add(0, app_key_index, app_key)
         
-        for attempt in range(1, 4):
-            logger.info(f"  AppKey Add Attempt {attempt}/3...")
+        for attempt in range(1, 6):
+            # Add random jitter to avoid colliding with device beacon window
+            jitter = random.uniform(0.5, 2.0)
+            logger.info(f"  AppKey Add Attempt {attempt}/5 (jitter {jitter:.1f}s)...")
+            await asyncio.sleep(jitter)
             ack_event.clear()
             await self.stack.send_model_message(node_addr, self.config_client, opcode, payload)
             try:
