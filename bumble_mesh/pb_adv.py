@@ -51,9 +51,23 @@ class PBAdvLink:
         logger.info("PB-ADV Link Opened.")
 
     async def close(self, reason: int = 0x00):
-        """Sends a Link Close message to the device."""
+        """Sends a Link Close message and waits for the device to stop responding."""
+        self.local_trans_num = (self.local_trans_num + 1) % 256
         pdu = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (0x02 << 2) | 0x03, reason])
-        await self._send_wrapper(pdu)
+
+        # Send Link Close in a short burst, then wait for device to acknowledge
+        logger.info(f"Sending PB-ADV Link Close (Reason: {reason:02x})...")
+        start = time.time()
+        # Track whether device has responded with its own Link Close
+        self._peer_link_close_received = False
+
+        while time.time() - start < 3.0:
+            await self._send_wrapper(pdu)
+            await asyncio.sleep(0.3)
+            if self._peer_link_close_received:
+                logger.info("Device acknowledged Link Close.")
+                break
+
         self.is_opened = False
         logger.info(f"PB-ADV Link Closed (Reason: {reason:02x}).")
 
@@ -69,7 +83,9 @@ class PBAdvLink:
 
         if (gpc_byte & 0x03) == 0x03:
             if gpc_byte == 0x07: self.link_ack_received.set()
-            elif gpc_byte == 0x0B: self.is_opened = False
+            elif gpc_byte == 0x0B:
+                self.is_opened = False
+                self._peer_link_close_received = True
             return
 
         is_ack = (gpc_byte & 0x03) == 0x01

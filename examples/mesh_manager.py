@@ -52,20 +52,21 @@ class MeshManager:
             print("\n --- 第二步：锁定与控制 (Control) ---")
             print("  3. 查看已配网节点列表 (Nodes List)")
             print("  4. 锁定操作目标地址 (Set Target)")
-            print("  5. 控制指令: 开灯 (ON)")
-            print("  6. 控制指令: 关灯 (OFF)")
-            print("  7. 查询实时状态 (Get Status)")
+            print("  5. 获取设备功能列表 (Composition Get)")
+            print("  6. 控制指令: 开灯 (ON)")
+            print("  7. 控制指令: 关灯 (OFF)")
+            print("  8. 查询实时状态 (Get Status)")
 
             print("\n --- 第三步：远程扩展与维护 (Advanced) ---")
-            print("  8. 远程扫描 (通过当前目标节点进行)")
-            print("  9. 远程配网 (通过当前目标节点进行)")
-            print("  10. 手动触发配置 (Manual Re-Config Target)")
+            print("  9. 远程扫描 (通过当前目标节点进行)")
+            print("  10. 远程配网 (通过当前目标节点进行)")
+            print("  11. 手动触发配置 (Manual Re-Config Target)")
             
             print("\n --- 其他 ---")
-            print("  11. 退出 (Quit)")
+            print("  12. 退出 (Quit)")
             print("-" * 45)
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-11]: ")
+            choice = await asyncio.to_thread(input, "请选择操作 [1-12]: ")
             
             if choice == '1':
                 await self.scan_flow()
@@ -76,18 +77,20 @@ class MeshManager:
             elif choice == '4':
                 await self.target_flow()
             elif choice == '5':
-                await self.control_onoff(True)
+                await self.composition_get_flow()
             elif choice == '6':
-                await self.control_onoff(False)
+                await self.control_onoff(True)
             elif choice == '7':
-                await self.get_status()
+                await self.control_onoff(False)
             elif choice == '8':
-                await self.remote_scan_flow()
+                await self.get_status()
             elif choice == '9':
-                await self.remote_provision_flow()
+                await self.remote_scan_flow()
             elif choice == '10':
-                await self.manual_config_flow()
+                await self.remote_provision_flow()
             elif choice == '11':
+                await self.manual_config_flow()
+            elif choice == '12':
                 break
             else:
                 print("无效选择")
@@ -98,6 +101,37 @@ class MeshManager:
             return
         print(f"正在为 {self.target_addr:04x} 重新执行配置流...")
         await self.stack.config_manager.configure_node(self.target_addr, 0, self.app_key)
+
+    async def composition_get_flow(self):
+        if not self.target_addr:
+            print("错误: 请先设置目标地址")
+            return
+        print(f"\n正在获取节点 {self.target_addr:04x} 的 Composition Data...")
+        comp_event = asyncio.Event()
+        def on_comp(src, page, data):
+            if src == self.target_addr:
+                print(f"\n[Composition] 收到 Page {page}, {len(data)} 字节")
+                comp_event.set()
+        self.stack.config_client.on_composition_data = on_comp
+        opcode, payload = self.stack.config_client.composition_data_get()
+        await self.stack.send_model_message(self.target_addr, self.stack.config_client, opcode, payload)
+        try:
+            await asyncio.wait_for(comp_event.wait(), timeout=5.0)
+            print(f"[Composition] 节点 {self.target_addr:04x} 的模型信息已存入数据库。")
+            # Show stored models
+            models = self.stack.storage.get_node_models(self.target_addr)
+            if models:
+                print("  已记录的模型:")
+                for m in models:
+                    vendor_tag = " (Vendor)" if m.get('is_vendor') else ""
+                    print(f"    Element {m['elem_addr']:04x} | Model 0x{m['model_id']:04x}{vendor_tag}")
+            else:
+                print("  (无模型记录)")
+        except asyncio.TimeoutError:
+            print("[Composition] 超时: 设备未响应 (5秒)。请检查:")
+            print("  1. 设备是否已完成配网并切换到 Mesh 网络模式")
+            print("  2. 目标地址是否正确")
+            print("  3. DevKey 是否匹配")
 
     async def remote_scan_flow(self):
         if not self.target_addr:

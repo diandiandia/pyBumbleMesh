@@ -72,8 +72,20 @@ async def main():
                 if not target_addr:
                     print("错误: 请先使用 'target' 指定设备地址")
                     continue
+                # Set callback BEFORE sending, to capture the response
+                comp_received = asyncio.Event()
+                def on_comp(src, page, data):
+                    if src == target_addr:
+                        print(f"\n[COMPOSITION] 收到节点 {src:04x} 的 Composition Data (Page {page}, {len(data)} 字节)")
+                        comp_received.set()
+                stack.config_client.on_composition_data = on_comp
                 opcode, payload = stack.config_client.composition_data_get()
                 await stack.send_model_message(target_addr, stack.config_client, opcode, payload)
+                try:
+                    await asyncio.wait_for(comp_received.wait(), timeout=5.0)
+                    print("[COMPOSITION] 数据已收到，模型信息已存入数据库。")
+                except asyncio.TimeoutError:
+                    print("[COMPOSITION] 超时: 未收到设备响应 (5秒)")
 
             elif cmd == 'appkey-add':
                 if not target_addr: continue

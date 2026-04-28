@@ -176,13 +176,19 @@ class MeshStack:
                         
                         # --- START AUTOMATIC CONFIGURATION WITH SAFETY HANDSHAKE ---
                         async def finalize_and_configure():
-                            # 1. 显式关闭 PB-ADV 链路
+                            # 1. 显式关闭 PB-ADV 链路 (含握手等待)
                             logger.info("Closing PB-ADV link and releasing controller...")
                             await pb_link.close()
-                            # 2. 给予更充足的初始化时间 (增加到 8 秒)
-                            logger.info(f"Waiting 8 seconds for node {next_addr:04x} to resolve potential HCI lock-up...")
-                            await asyncio.sleep(8.0)
-                            # 3. 启动配置流
+                            # 2. 等待设备完全退出 PB-ADV 模式，切换到 Mesh 网络模式
+                            #    设备在 Link Close 后需要时间重新初始化 radio 并开始扫描 Mesh ADV
+                            logger.info(f"Waiting 10 seconds for node {next_addr:04x} to switch to Mesh Network mode...")
+                            await asyncio.sleep(10.0)
+                            # 3. 清理 PB-ADV 会话，避免旧消息干扰
+                            if link_id in self.provisioning_sessions:
+                                del self.provisioning_sessions[link_id]
+                            if link_id in self.provisioning_states:
+                                del self.provisioning_states[link_id]
+                            # 4. 启动配置流
                             await self.config_manager.configure_node(next_addr, 0, b'\x02'*16)
                         
                         asyncio.create_task(finalize_and_configure())
