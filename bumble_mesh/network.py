@@ -13,7 +13,7 @@ class NetworkLayer:
         self.seq = 0
         
         # Derive keys
-        self.nid, self.encryption_key, self.privacy_key = k2(net_key, b'master')
+        self.nid, self.encryption_key, self.privacy_key = k2(net_key, b'\x00')
 
     def encrypt_pdu(self, src: int, dst: int, transport_pdu: bytes, ctl: int = 0, ttl: int = 4) -> bytes:
         ivi_nid = ((self.iv_index & 1) << 7) | self.nid
