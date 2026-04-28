@@ -132,8 +132,9 @@ class ProvisioningSession:
         return None
 
     def _send_confirm(self) -> bytes:
-        # Note: BlueZ excludes opcodes from confirmation inputs
-        inputs = self.pdu_invite[1:] + self.pdu_capabilities[1:] + self.pdu_start[1:] + \
+        # Standard Mesh Spec: ConfirmationInputs = InvitePDU || CapabilitiesPDU || StartPDU || PubKeyP || PubKeyD
+        # PDUs MUST include the opcode byte.
+        inputs = self.pdu_invite + self.pdu_capabilities + self.pdu_start + \
                  self.local_key.x + self.local_key.y + self.remote_public_key_x + self.remote_public_key_y
         self.provisioning_salt = s1(inputs)
         conf_key = k1(self.shared_secret, self.provisioning_salt, b"prck")
