@@ -149,7 +149,7 @@ class MeshManager:
 
         self.stack.rp_client.on_scan_report = on_remote_report
         opcode, payload = self.stack.rp_client.scan_start(timeout=10)
-        await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload, app_key=self.app_key)
+        await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload)
         await asyncio.sleep(10.0)
         print("\n远程扫描结束。")
 

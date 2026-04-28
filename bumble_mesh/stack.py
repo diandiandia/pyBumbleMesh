@@ -71,7 +71,7 @@ class MeshStack:
         if nodes: next_addr = max(n['address'] for n in nodes) + 1
             
         # Create a Remote Tunnel Link instead of PB-ADV
-        pb_link = PBRemoteLink(self, server_addr, self.rp_client, app_key=b'\x02'*16)
+        pb_link = PBRemoteLink(self, server_addr, self.rp_client)
         link_id = random.getrandbits(32) # For internal tracking
         self.provisioning_sessions[link_id] = pb_link
         
@@ -278,7 +278,8 @@ class MeshStack:
     async def send_model_message(self, dst: int, model, opcode: int, payload: bytes, app_key: bytes = None):
         self.storage.set_setting("seq", self.network.seq + 1)
         access_pdu = self._create_access_pdu(opcode, payload)
-        if model.MODEL_ID == 0x0001:
+        # Config models and Remote Provisioning models use DevKey (AKF=0)
+        if model.MODEL_ID in (0x0001, 0x0005):
             key = self.upper_transport.get_dev_key(dst) or b'\x00'*16
             akf, aid = 0, 0
         else:
