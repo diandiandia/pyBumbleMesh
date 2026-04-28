@@ -9,10 +9,11 @@ class PBRemoteLink:
     PB-Remote Link Layer (Mesh v1.1).
     Encapsulates Provisioning PDUs into Remote Provisioning Client messages.
     """
-    def __init__(self, stack, server_addr: int, rp_client):
+    def __init__(self, stack, server_addr: int, rp_client, app_key: bytes = None):
         self.stack = stack
         self.server_addr = server_addr
         self.rp_client = rp_client
+        self.app_key = app_key
         self.outbound_pdu_count = 1
         self.on_provisioning_pdu: Optional[Callable[[bytes], None]] = None
         
@@ -41,7 +42,7 @@ class PBRemoteLink:
         self.link_ack_received.clear()
         
         opcode, payload = self.rp_client.link_open(device_uuid)
-        await self.stack.send_model_message(self.server_addr, self.rp_client, opcode, payload)
+        await self.stack.send_model_message(self.server_addr, self.rp_client, opcode, payload, app_key=self.app_key)
         
         try:
             await asyncio.wait_for(self.link_ack_received.wait(), timeout)
@@ -57,7 +58,7 @@ class PBRemoteLink:
         self.pdu_ack_received.clear()
         
         opcode, payload = self.rp_client.pdu_send(self.outbound_pdu_count, pdu)
-        await self.stack.send_model_message(self.server_addr, self.rp_client, opcode, payload)
+        await self.stack.send_model_message(self.server_addr, self.rp_client, opcode, payload, app_key=self.app_key)
         
         try:
             await asyncio.wait_for(self.pdu_ack_received.wait(), timeout)

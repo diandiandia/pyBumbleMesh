@@ -71,7 +71,7 @@ class MeshStack:
         if nodes: next_addr = max(n['address'] for n in nodes) + 1
             
         # Create a Remote Tunnel Link instead of PB-ADV
-        pb_link = PBRemoteLink(self, server_addr, self.rp_client)
+        pb_link = PBRemoteLink(self, server_addr, self.rp_client, app_key=b'\x02'*16)
         link_id = random.getrandbits(32) # For internal tracking
         self.provisioning_sessions[link_id] = pb_link
         
