@@ -26,14 +26,17 @@ class MeshStack:
         
         networks = self.storage.get_networks()
         if not networks:
+            logger.info(f"Storage empty. Saving default NetKey: {net_key.hex()}")
             self.storage.save_network(0, net_key, 0)
             self.net_key = net_key
             self.iv_index = 0
         else:
             self.net_key = networks[0]['key']
             self.iv_index = networks[0]['iv_index']
+            logger.info(f"Loaded NetKey from storage: {self.net_key.hex()}")
 
         self.network = NetworkLayer(self.net_key, iv_index=self.iv_index)
+        logger.info(f"Network Layer Initialized. NID: 0x{self.network.nid:02x}")
         self.network.seq = int(self.storage.get_setting("seq", 0))
         
         self.bearer = AdvBearer(device)
