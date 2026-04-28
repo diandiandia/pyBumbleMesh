@@ -176,12 +176,12 @@ class MeshStack:
                         
                         # --- START AUTOMATIC CONFIGURATION WITH SAFETY HANDSHAKE ---
                         async def finalize_and_configure():
-                            # 1. 显式关闭 PB-ADV 链路 (让 BlueZ 完成身份切换)
+                            # 1. 显式关闭 PB-ADV 链路
+                            logger.info("Closing PB-ADV link and releasing controller...")
                             await pb_link.close()
-                            # 2. 给予充足的初始化时间 (增加到 5 秒)
-                            # BlueZ 在 Link Close 后会进行大量的 Flash 写入和 Beacon 初始化
-                            logger.info(f"Waiting 5 seconds for node {next_addr:04x} to finalize initialization...")
-                            await asyncio.sleep(5.0)
+                            # 2. 给予更充足的初始化时间 (增加到 8 秒)
+                            logger.info(f"Waiting 8 seconds for node {next_addr:04x} to resolve potential HCI lock-up...")
+                            await asyncio.sleep(8.0)
                             # 3. 启动配置流
                             await self.config_manager.configure_node(next_addr, 0, b'\x02'*16)
                         

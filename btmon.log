@@ -1,0 +1,876 @@
+pi1@pi1:~ $ sudo btmon -i 1
+Bluetooth monitor ver 5.82
+btmon[265130]: = Note: Linux version 6.12.75+rpt-rpi-v8 (aarch64)                                                                                                                                                           0.121927
+btmon[265130]: = Note: Bluetooth subsystem version 2.22                                                                                                                                                                     0.121934
+= New Index: 00:AA:01:00:00:01 (Primary,Virtual,hci1)                                                                                                                                                                       0.121936
+= Open Index: 00:AA:01:00:00:01                                                                                                                                                                                             0.121937
+= Index Info: 00:AA:01:00:00:01 (The Linux Foundation)                                                                                                                                                                      0.121938
+= New Index: DC:A6:32:DC:4A:A4 (Primary,UART,hci0)                                                                                                                                                                          0.121939
+bluetooth-meshd[264987]: @ USER Open: bluetooth-meshd (privileged) version 2.22                                                                                                                                    {0x0002} 0.121941
+bluetooth-meshd[264987]: @ MGMT Open: bluetooth-meshd (privileged) version 1.23                                                                                                                                    {0x0001} 0.121943
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                     #1 0.256563
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                              #2 0.256600
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                              #3 0.256641
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                              #4 0.256651
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                    #5 0.256683
+        Length: 21
+        Mesh Beacon[19]: 00a7f3a2a5f8bc44a587d99dc1d59a90bc0001
+          Unprovisioned Device Beacon (0x00)
+          Device UUID[16]: a7f3a2a5f8bc44a587d99dc1d59a90bc
+          OOB Information: 0x0001
+            Other
+        01                                               .               
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                              #6 0.256695
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                     #7 0.256724
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                              #8 0.256736
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                     #9 0.756596
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #10 0.756629
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #11 0.756670
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #12 0.756680
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                   #13 0.756711
+        Length: 21
+        Mesh Beacon[19]: 00a7f3a2a5f8bc44a587d99dc1d59a90bc0001
+          Unprovisioned Device Beacon (0x00)
+          Device UUID[16]: a7f3a2a5f8bc44a587d99dc1d59a90bc
+          OOB Information: 0x0001
+            Other
+        01                                               .               
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #14 0.756721
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #15 0.756750
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #16 0.756759
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+> HCI Event: LE Meta Event (0x3e) plen 40                                                                                                                                                                               #17 0.924628
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 28
+        Mesh Provisioning[26]: 15295a24040000119505acbfd8597f06da05a471c0d9fa6e1cb0
+          Link ID: 0x15295a24
+          Transaction Number: 4
+          Transaction Start (0x00)
+          SeqN: 0
+          TotalLength: 17
+          FCS: 0x95
+          Data[17]: 05acbfd8597f06da05a471c0d9fa6e1cb0
+        ac bf d8 59 7f 06 da 05 a4 71 c0 d9 fa 6e 1c b0  ...Y.....q...n..
+        RSSI: invalid (0x7f)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #18 0.924978
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #19 0.925004
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #20 0.925076
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #21 0.925090
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #22 0.925138
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #23 0.925149
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #24 0.925203
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #25 0.925214
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                   #26 0.925249
+        Length: 28
+        Mesh Provisioning[26]: 15295a24820000117b050e6240399ebe0c6ad689f261ae6af597
+          Link ID: 0x15295a24
+          Transaction Number: 130
+          Transaction Start (0x00)
+          SeqN: 0
+          TotalLength: 17
+          FCS: 0x7b
+          Data[17]: 050e6240399ebe0c6ad689f261ae6af597
+        0e 62 40 39 9e be 0c 6a d6 89 f2 61 ae 6a f5 97  .b@9...j...a.j..
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #27 0.925259
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #28 0.925326
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #29 0.925338
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+> HCI Event: LE Meta Event (0x3e) plen 20                                                                                                                                                                               #30 1.014911
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 8
+        Mesh Provisioning[6]: 15295a248201
+          Link ID: 0x15295a24
+          Transaction Number: 130
+          Transaction Acknowledgment (0x01)
+        RSSI: invalid (0x7f)
+> HCI Event: LE Meta Event (0x3e) plen 40                                                                                                                                                                               #31 1.167272
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 28
+        Mesh Provisioning[26]: 15295a24050000111206244418c7cf308de487c8d10bfa3325fa
+          Link ID: 0x15295a24
+          Transaction Number: 5
+          Transaction Start (0x00)
+          SeqN: 0
+          TotalLength: 17
+          FCS: 0x12
+          Data[17]: 06244418c7cf308de487c8d10bfa3325fa
+        24 44 18 c7 cf 30 8d e4 87 c8 d1 0b fa 33 25 fa  $D...0.......3%.
+        RSSI: invalid (0x7f)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #32 1.167694
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #33 1.167741
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #34 1.167785
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #35 1.167795
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #36 1.167840
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #37 1.167851
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #38 1.167888
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #39 1.167899
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                   #40 1.167933
+        Length: 28
+        Mesh Provisioning[26]: 15295a2483000011df06de9206530d06d77605e7489bb14e6e7e
+          Link ID: 0x15295a24
+          Transaction Number: 131
+          Transaction Start (0x00)
+          SeqN: 0
+          TotalLength: 17
+          FCS: 0xdf
+          Data[17]: 06de9206530d06d77605e7489bb14e6e7e
+        de 92 06 53 0d 06 d7 76 05 e7 48 9b b1 4e 6e 7e  ...S...v..H..Nn~
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #41 1.167944
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #42 1.167978
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #43 1.167989
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+> HCI Event: LE Meta Event (0x3e) plen 20                                                                                                                                                                               #44 1.258806
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 8
+        Mesh Provisioning[6]: 15295a248301
+          Link ID: 0x15295a24
+          Transaction Number: 131
+          Transaction Acknowledgment (0x01)
+        RSSI: invalid (0x7f)
+> HCI Event: LE Meta Event (0x3e) plen 43                                                                                                                                                                               #45 1.411280
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 31
+        Mesh Provisioning[29]: 15295a24060400221207bb1a229b326429b0c2c6bedf859bb4c3cbd229
+          Link ID: 0x15295a24
+          Transaction Number: 6
+          Transaction Start (0x00)
+          SeqN: 4
+          TotalLength: 34
+          FCS: 0x12
+          Data[20]: 07bb1a229b326429b0c2c6bedf859bb4c3cbd229
+        bb 1a 22 9b 32 64 29 b0 c2 c6 be df 85 9b b4 c3  ..".2d).........
+        cb d2 29                                         ..)             
+        RSSI: invalid (0x7f)
+> HCI Event: LE Meta Event (0x3e) plen 34                                                                                                                                                                               #46 1.609340
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 22
+        Mesh Provisioning[20]: 15295a240606db94621951b42a78c88b5ab6fa1b
+          Link ID: 0x15295a24
+          Transaction Number: 6
+          Transaction Continuation (0x02)
+          SegmentIndex: 1
+          Data[14]: db94621951b42a78c88b5ab6fa1b
+        94 62 19 51 b4 2a 78 c8 8b 5a b6 fa 1b           .b.Q.*x..Z...   
+        RSSI: invalid (0x7f)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #47 1.611048
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #48 1.611080
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #49 1.611131
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #50 1.611141
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #51 1.611231
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #52 1.611243
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #53 1.611308
+        Min advertising interval: 500.000 msec (0x0320)
+        Max advertising interval: 500.000 msec (0x0320)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #54 1.611318
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                   #55 1.611352
+        Length: 12
+        Mesh Provisioning[10]: 15295a24840000013e08
+          Link ID: 0x15295a24
+          Transaction Number: 132
+          Transaction Start (0x00)
+          SeqN: 0
+          TotalLength: 1
+          FCS: 0x3e
+          Data[1]: 08
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #56 1.611363
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #57 1.611403
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #58 1.611415
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+> HCI Event: LE Meta Event (0x3e) plen 20                                                                                                                                                                               #59 1.698814
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 8
+        Mesh Provisioning[6]: 15295a248401
+          Link ID: 0x15295a24
+          Transaction Number: 132
+          Transaction Acknowledgment (0x01)
+        RSSI: invalid (0x7f)
+> HCI Event: LE Meta Event (0x3e) plen 21                                                                                                                                                                               #60 1.853595
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 9
+        Mesh Provisioning[7]: 15295a24060b00
+          Link ID: 0x15295a24
+          Transaction Number: 6
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+        RSSI: invalid (0x7f)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #61 1.853799
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #62 1.853819
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #63 1.854111
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #64 1.854130
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #65 1.854172
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #66 1.854183
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #67 1.854215
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #68 1.854225
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Random Address (0x08|0x0005) plen 6                                                                                                                                      #69 1.854260
+        Address: C1:A9:00:B3:85:38 (Static)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #70 1.854271
+      LE Set Random Address (0x08|0x0005) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Random Address (0x08|0x0005) plen 6                                                                                                                                      #71 1.854310
+        Address: DF:B1:E1:65:FC:D6 (Static)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #72 1.854321
+      LE Set Random Address (0x08|0x0005) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Random Address (0x08|0x0005) plen 6                                                                                                                                      #73 1.854453
+        Address: E2:09:11:FC:3F:33 (Static)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #74 1.854466
+      LE Set Random Address (0x08|0x0005) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #75 1.854505
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #76 1.854515
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                   #77 1.854569
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #78 1.854580
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #79 1.854625
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #80 1.854636
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #81 1.953841
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #82 1.953871
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #83 1.953912
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #84 1.953921
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                   #85 1.953953
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #86 1.953962
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #87 1.953992
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #88 1.954002
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #89 2.053885
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #90 2.053914
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #91 2.053953
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #92 2.053965
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                   #93 2.053998
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #94 2.054009
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #95 2.054039
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #96 2.054050
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                    #97 2.153926
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                             #98 2.153960
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                             #99 2.153999
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #100 2.154010
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #101 2.154043
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #102 2.154055
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #103 2.154085
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #104 2.154097
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #105 2.253961
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #106 2.253993
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #107 2.254033
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #108 2.254044
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #109 2.254075
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #110 2.254085
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #111 2.254115
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #112 2.254127
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #113 2.353998
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #114 2.354026
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #115 2.354065
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #116 2.354077
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #117 2.354108
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #118 2.354119
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #119 2.354149
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #120 2.354159
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #121 2.454036
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #122 2.454066
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #123 2.454105
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #124 2.454116
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #125 2.454147
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #126 2.454158
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #127 2.454186
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #128 2.454196
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #129 2.554076
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #130 2.554106
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #131 2.554146
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #132 2.554156
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #133 2.554188
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #134 2.554199
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #135 2.554230
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #136 2.554241
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #137 2.654120
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #138 2.654152
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #139 2.654192
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #140 2.654202
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #141 2.654232
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #142 2.654242
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #143 2.654272
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #144 2.654283
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #145 2.754159
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #146 2.754188
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #147 2.754228
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #148 2.754238
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #149 2.754271
+        Length: 9
+        Mesh Provisioning[7]: 15295a24000b00
+          Link ID: 0x15295a24
+          Transaction Number: 0
+          Provisioning Bearer Control (0x03)
+          Link Close (0x02)
+          Reason: Success (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #150 2.754280
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #151 2.754310
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #152 2.754319
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #153 2.854206
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #154 2.854238
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Random Address (0x08|0x0005) plen 6                                                                                                                                     #155 2.854283
+        Address: E0:8F:94:8C:41:26 (Static)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #156 2.854296
+      LE Set Random Address (0x08|0x0005) ncmd 1
+        Status: Command Disallowed (0x0c)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #157 3.165056
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #158 3.165086
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #159 3.165124
+        Length: 24
+        Mesh Beacon[22]: 01009dbff584fdcc7dbc00000000702f10390d5ddf70
+          Secure Network Beacon (0x01)
+          Flags: 0x01
+          Network Id[8]: 9dbff584fdcc7dbc
+          IV Index: 0x00000000
+          Authentication Value[8]: 702f10390d5ddf70
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #160 3.165134
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #161 3.165167
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #162 3.165178
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #163 3.265100
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #164 3.265129
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                            #165 3.265167
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #166 3.265176
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                  #167 3.265210
+        Length: 24
+        Mesh Beacon[22]: 01009dbff584fdcc7dbc00000000702f10390d5ddf70
+          Secure Network Beacon (0x01)
+          Flags: 0x01
+          Network Id[8]: 9dbff584fdcc7dbc
+          IV Index: 0x00000000
+          Authentication Value[8]: 702f10390d5ddf70
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #168 3.265218
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #169 3.265251
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #170 3.265260
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                   #171 3.365142
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #172 3.365170
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Random Address (0x08|0x0005) plen 6                                                                                                                                     #173 3.365214
+        Address: C7:99:02:C2:46:95 (Static)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                            #174 3.365224
+      LE Set Random Address (0x08|0x0005) ncmd 1
+        Status: Command Disallowed (0x0c)
+> HCI Event: LE Meta Event (0x3e) plen 39                                                                                                                                                                              #175 6.960016
+      LE Advertising Report (0x02)
+        Num reports: 1
+        Event type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Address type: Public (0x00)
+        Address: 00:AA:01:04:00:43 (Intel Corporation)
+        Data length: 27
+        Mesh Data[25]: 7da16315593d71000296ea3eb543dfa21cb6e87bdb8f751433
+          IVI: 0
+          NID: 0x7d
+        a1 63 15 59 3d 71 00 02 96 ea 3e b5 43 df a2 1c  .c.Y=q....>.C...
+        b6 e8 7b db 8f 75 14 33                          ..{..u.3        
+        RSSI: invalid (0x7f)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                           #176 13.170121
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #177 13.170156
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                 #178 13.170196
+        Length: 24
+        Mesh Beacon[22]: 01009dbff584fdcc7dbc00000000702f10390d5ddf70
+          Secure Network Beacon (0x01)
+          Flags: 0x01
+          Network Id[8]: 9dbff584fdcc7dbc
+          IV Index: 0x00000000
+          Authentication Value[8]: 702f10390d5ddf70
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #179 13.170206
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                  #180 13.170239
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #181 13.170251
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                  #182 13.270163
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #183 13.270192
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Parameters (0x08|0x0006) plen 15                                                                                                                           #184 13.270230
+        Min advertising interval: 100.000 msec (0x00a0)
+        Max advertising interval: 100.000 msec (0x00a0)
+        Type: Non connectable undirected - ADV_NONCONN_IND (0x03)
+        Own address type: Random (0x01)
+        Direct address type: Public (0x00)
+        Direct address: 00:00:00:00:00:00 (OUI 00-00-00)
+        Channel map: 37, 38, 39 (0x07)
+        Filter policy: Allow Scan Request from Accept List Only, Allow Connect Request from Accept List Only (0x03)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #185 13.270240
+      LE Set Advertising Parameters (0x08|0x0006) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertising Data (0x08|0x0008) plen 32                                                                                                                                 #186 13.270272
+        Length: 24
+        Mesh Beacon[22]: 01009dbff584fdcc7dbc00000000702f10390d5ddf70
+          Secure Network Beacon (0x01)
+          Flags: 0x01
+          Network Id[8]: 9dbff584fdcc7dbc
+          IV Index: 0x00000000
+          Authentication Value[8]: 702f10390d5ddf70
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #187 13.270284
+      LE Set Advertising Data (0x08|0x0008) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                  #188 13.270315
+        Advertising: Enabled (0x01)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #189 13.270326
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Advertise Enable (0x08|0x000a) plen 1                                                                                                                                  #190 13.370213
+        Advertising: Disabled (0x00)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #191 13.370244
+      LE Set Advertise Enable (0x08|0x000a) ncmd 1
+        Status: Success (0x00)
+bluetooth-meshd[264987]: < HCI Command: LE Set Random Address (0x08|0x0005) plen 6                                                                                                                                    #192 13.370288
+        Address: CC:48:5A:C5:86:98 (Static)
+> HCI Event: Command Complete (0x0e) plen 4                                                                                                                                                                           #193 13.370298
+      LE Set Random Address (0x08|0x0005) ncmd 1
+        Status: Command Disallowed (0x0c)
