@@ -170,8 +170,13 @@ class MeshStack:
                         self.storage.save_node(next_addr, uuid, session.shared_secret)
                         self.upper_transport.add_dev_key(next_addr, session.shared_secret)
                         
-                        # --- START AUTOMATIC CONFIGURATION ---
-                        asyncio.create_task(self.config_manager.configure_node(next_addr, 0, b'\x02'*16))
+                        # --- START AUTOMATIC CONFIGURATION WITH SAFETY DELAY ---
+                        async def delayed_config():
+                            logger.info(f"Waiting 5 seconds for node {next_addr:04x} to initialize...")
+                            await asyncio.sleep(5.0)
+                            await self.config_manager.configure_node(next_addr, 0, b'\x02'*16)
+                        
+                        asyncio.create_task(delayed_config())
                         break
                 except Exception as e: logger.error(f"Worker Error: {e}")
                 finally: pdu_queue.task_done()
@@ -215,8 +220,12 @@ class MeshStack:
                 self.provisioning_sessions[link_id].handle_pdu(pdu)
                 return
         result = self.network.decrypt_pdu(pdu)
-        if not result: return
+        if not result:
+            return
+        
         src, dst, seq, transport_pdu_raw = result
+        # Note: network.py already prints "RX 网络层 解密成功"
+
         res = self.transport.assemble_pdu(src, transport_pdu_raw, seq=seq)
         if not res: return
         full_pdu, akf_or_ctl, seq_auth, block = res
@@ -226,11 +235,16 @@ class MeshStack:
             asyncio.create_task(self._send_control_message(src, self.transport.create_segment_ack(seq_auth & 0x1FFF, block)))
         
         if not full_pdu: return 
+        print(f" [RX 传输层] 分段组装完成 ({len(full_pdu)} 字节)")
         
         # Decrypt based on AKF bit from the PDU
         # Config messages (akf_or_ctl=0) use DevKey, others use AppKey
         access_pdu = self.upper_transport.decrypt(src, dst, seq_auth, self.network.iv_index, full_pdu, akf=akf_or_ctl, aid=0)
-        if access_pdu: self.access.handle_pdu(src, dst, 0, access_pdu)
+        if access_pdu:
+            print(f" [RX 应用层] 业务数据解密成功: {access_pdu.hex()}")
+            self.access.handle_pdu(src, dst, 0, access_pdu)
+        else:
+            print(f" [RX 应用层] 解密失败 (可能 DevKey/AppKey 不匹配)")
 
     async def _send_control_message(self, dst: int, payload: bytes):
         # Control messages (CTL=1) have a different MIC length and Nonce
