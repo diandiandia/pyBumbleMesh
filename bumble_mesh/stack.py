@@ -171,7 +171,11 @@ class MeshStack:
                         self.upper_transport.add_dev_key(next_addr, session.shared_secret)
                         
                         # --- START AUTOMATIC CONFIGURATION ---
-                        asyncio.create_task(self.config_manager.configure_node(next_addr, 0, b'\x02'*16))
+                        async def delayed_config():
+                            await asyncio.sleep(2.0)
+                            await self.config_manager.configure_node(next_addr, 0, b'\x02'*16)
+                        
+                        asyncio.create_task(delayed_config())
                         break
                 except Exception as e: logger.error(f"Worker Error: {e}")
                 finally: pdu_queue.task_done()
