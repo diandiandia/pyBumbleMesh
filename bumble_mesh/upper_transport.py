@@ -46,12 +46,12 @@ class UpperTransportLayer:
     def encrypt(self, src: int, dst: int, seq: int, iv_index: int, payload: bytes, key: bytes, akf: int, aid: int = 0) -> bytes:
         """
         Encrypts an Access PDU.
-        akf=0: Device Key -> 8-byte MIC, ASZMIC=1
-        akf=1: App Key -> 4-byte MIC, ASZMIC=0
+        BlueZ uses 4-byte MIC for unsegmented messages regardless of AKF.
+        For DevKey (akf=0): aszmic=0, mic_len=4 (matching BlueZ msg_rxed behavior)
         """
         nonce_type = 0x01 if akf else 0x02
-        aszmic = 1 if akf == 0 else 0
-        mic_len = 8 if akf == 0 else 4
+        aszmic = 0  # BlueZ always uses 4-byte MIC for unsegmented
+        mic_len = 4
         
         nonce = self._create_nonce(nonce_type, aszmic, seq, src, dst, iv_index)
         return aes_ccm_encrypt(key, nonce, payload, b'', mic_len)
@@ -61,8 +61,8 @@ class UpperTransportLayer:
         Decrypts an incoming Upper Transport PDU.
         """
         nonce_type = 0x01 if akf else 0x02
-        # For AKF=0, ASZMIC is always 1 (8-byte MIC)
-        actual_aszmic = 1 if akf == 0 else aszmic
+        # BlueZ uses 4-byte MIC for unsegmented messages regardless of AKF
+        actual_aszmic = aszmic  # Use the provided aszmic (0 for unsegmented)
         mic_len = 8 if actual_aszmic else 4
         
         nonce = self._create_nonce(nonce_type, actual_aszmic, seq, src, dst, iv_index)
