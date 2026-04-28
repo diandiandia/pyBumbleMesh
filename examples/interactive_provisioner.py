@@ -7,7 +7,19 @@ from bumble_mesh.stack import MeshStack
 from bumble_mesh.models.config import ConfigClient
 from bumble_mesh.provisioning import ProvisioningState
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(name)s: %(message)s')
+# 设置详细日志，同时保存到文件
+log_format = '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+logging.basicConfig(level=logging.INFO, format=log_format)
+
+# 获取根日志记录器并添加文件处理器
+root_logger = logging.getLogger()
+file_handler = logging.FileHandler('provisioning_debug.log', mode='w', encoding='utf-8')
+file_handler.setFormatter(logging.Formatter(log_format))
+root_logger.addHandler(file_handler)
+
+# 设置 bumble_mesh 的日志级别为 DEBUG 以捕获更多细节
+logging.getLogger('bumble_mesh').setLevel(logging.DEBUG)
+
 logger = logging.getLogger(__name__)
 
 async def main():

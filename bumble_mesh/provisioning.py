@@ -65,6 +65,7 @@ class ProvisioningSession:
             self.state = ProvisioningState.CONFIRM
 
     def handle_pdu(self, pdu: bytes, **kwargs) -> Optional[bytes]:
+        logger.debug(f"Provisioning PDU RX: {pdu.hex()}")
         pdu_type = pdu[0]
         if pdu_type == 0x01: # Capabilities
             return self._handle_capabilities(pdu)

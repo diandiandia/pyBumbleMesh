@@ -143,6 +143,7 @@ class MeshStack:
                     
                     if resp:
                         async def send_task(p_to_send):
+                            logger.debug(f"Provisioning PDU TX: {p_to_send.hex()}")
                             if p_to_send[0] == 0x02: # START
                                 success = await pb_link.send_transaction(p_to_send)
                                 if success:
@@ -244,7 +245,7 @@ class MeshStack:
 
         res = self.transport.assemble_pdu(src, transport_pdu_raw, seq=seq)
         if not res: return
-        full_pdu, akf_or_ctl, seq_auth, block = res
+        full_pdu, akf_or_ctl, seq_auth, block, aszmic = res
         
         # If it was a segmented message, we MUST send a Segment ACK
         if transport_pdu_raw[0] & 0x80:
@@ -255,7 +256,7 @@ class MeshStack:
         
         # Decrypt based on AKF bit from the PDU
         # Config messages (akf_or_ctl=0) use DevKey, others use AppKey
-        access_pdu = self.upper_transport.decrypt(src, dst, seq_auth, self.network.iv_index, full_pdu, akf=akf_or_ctl, aid=0)
+        access_pdu = self.upper_transport.decrypt(src, dst, seq_auth, self.network.iv_index, full_pdu, akf=akf_or_ctl, aid=0, aszmic=aszmic)
         if access_pdu:
             print(f" [RX 应用层] 业务数据解密成功: {access_pdu.hex()}")
             self.access.handle_pdu(src, dst, 0, access_pdu)

@@ -32,6 +32,7 @@ class PBAdvLink:
         self.transaction_lock = asyncio.Lock() # New lock for whole transactions
 
     async def _send_wrapper(self, pdu: bytes):
+        logger.debug(f"PB-ADV TX RAW: {pdu.hex()}")
         async with self.tx_lock:
             res = self.send_pdu_cb(pdu)
             if asyncio.iscoroutine(res): await res
@@ -60,6 +61,8 @@ class PBAdvLink:
         if len(pdu) < 5: return
         link_id = int.from_bytes(pdu[0:4], 'big')
         if link_id != self.link_id: return
+        
+        logger.debug(f"PB-ADV RX RAW: {pdu.hex()}")
         
         gpc_byte = pdu[5] if len(pdu) >= 6 else pdu[4]
         trans_num = pdu[4]

@@ -25,9 +25,11 @@ class LowerTransportLayer:
             segments = []
             seg_n = math.ceil(len(pdu) / 12) - 1
             seq_zero = seq & 0x1FFF
+            aszmic = 1 if akf == 0 else 0 # Device key messages use 64-bit MIC
+            
             for i in range(seg_n + 1):
                 h0 = 0x80 | ((akf & 1) << 6) | (aid & 0x3F)
-                h1 = (seq_zero >> 6) & 0x7F
+                h1 = (aszmic << 7) | ((seq_zero >> 6) & 0x7F)
                 h2 = ((seq_zero & 0x3F) << 2) | ((i >> 3) & 0x03)
                 h3 = ((i & 0x07) << 5) | (seg_n & 0x1F)
                 segments.append(bytes([h0, h1, h2, h3]) + pdu[i*12 : (i+1)*12])
@@ -49,17 +51,21 @@ class LowerTransportLayer:
         return bytes([h1, h2]) + block.to_bytes(4, 'big')
 
     def assemble_pdu(self, src: int, pdu: bytes, seq: int = 0) -> Optional[tuple]:
-        """Reassembles segments. Returns (Full_PDU, is_ctl, seq_auth, block_mask)."""
+        """Reassembles segments. Returns (Full_PDU, akf, seq_auth, block_mask, aszmic)."""
         if len(pdu) < 1: return None
         
         is_segmented = (pdu[0] & 0x80) != 0
+        akf = (pdu[0] >> 6) & 1
         
         if not is_segmented:
             # Unsegmented: SeqAuth is just the current seq
-            return pdu[1:], (pdu[0] >> 6) & 1, seq, 0
+            # Note: For AKF=0, Spec says MIC is always 64 bits (8 bytes), so ASZMIC=1
+            aszmic = 1 if akf == 0 else 0
+            return pdu[1:], akf, seq, 0, aszmic
         
         if len(pdu) < 4: return None
         h0, h1, h2, h3 = pdu[0:4]
+        aszmic = (h1 >> 7) & 1
         seq_zero = ((h1 & 0x7F) << 6) | (h2 >> 2)
         seg_o = ((h2 & 0x03) << 3) | (h3 >> 5)
         seg_n = h3 & 0x1F
@@ -71,7 +77,7 @@ class LowerTransportLayer:
             
         key = (src, seq_zero)
         if key not in self.rx_sessions:
-            self.rx_sessions[key] = {'total': seg_n + 1, 'parts': {}, 'block': 0, 'seq_auth': seq_auth}
+            self.rx_sessions[key] = {'total': seg_n + 1, 'parts': {}, 'block': 0, 'seq_auth': seq_auth, 'aszmic': aszmic}
             
         session = self.rx_sessions[key]
         session['parts'][seg_o] = pdu[4:]
@@ -80,7 +86,8 @@ class LowerTransportLayer:
         if len(session['parts']) == session['total']:
             full_pdu = b''.join(session['parts'][i] for i in range(session['total']))
             final_seq_auth = session['seq_auth']
+            final_aszmic = session['aszmic']
             del self.rx_sessions[key]
-            return full_pdu, 0, final_seq_auth, session['block']
+            return full_pdu, akf, final_seq_auth, session['block'], final_aszmic
             
-        return None, 0, seq_auth, session['block']
+        return None, akf, seq_auth, session['block'], aszmic
