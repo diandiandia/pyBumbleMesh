@@ -48,6 +48,7 @@ class ProvisioningSession:
         self.provisioner_random = os.urandom(16)
         self.device_random: Optional[bytes] = None
         self.device_confirmation: Optional[bytes] = None
+        self.dev_key: Optional[bytes] = None
 
     def invite(self, attention_duration: int = 0) -> bytes:
         self.pdu_invite = b'\x00' + bytes([attention_duration])
@@ -163,6 +164,8 @@ class ProvisioningSession:
         # 3. Derive Session Material using final_salt
         session_key = k1(self.shared_secret, final_salt, b"prsk")
         session_nonce = k1(self.shared_secret, final_salt, b"prsn")[3:16]
+        self.dev_key = k1(self.shared_secret, final_salt, b"prdk")
+        logger.info(f"DevKey derived successfully.")
         
         # 4. Prepare and Encrypt Provisioning Data
         prov_data = net_key + b'\x00\x00' + b'\x00' + iv_index.to_bytes(4, 'big') + unicast_address.to_bytes(2, 'big')

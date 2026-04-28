@@ -167,8 +167,8 @@ class MeshStack:
                     # Re-check state after handling PDU
                     if session.state == ProvisioningState.COMPLETE:
                         logger.info(f"Provisioning Successful! Node Address: {next_addr:04x}")
-                        self.storage.save_node(next_addr, uuid, session.shared_secret)
-                        self.upper_transport.add_dev_key(next_addr, session.shared_secret)
+                        self.storage.save_node(next_addr, uuid, session.dev_key)
+                        self.upper_transport.add_dev_key(next_addr, session.dev_key)
                         
                         # --- START AUTOMATIC CONFIGURATION WITH SAFETY HANDSHAKE ---
                         async def finalize_and_configure():
