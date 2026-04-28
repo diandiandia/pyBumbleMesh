@@ -155,6 +155,7 @@ class MeshManager:
         print("\n[!] 正在通过 Bumble HCI 发送恶意 BLE 广播...")
         try:
             from bumble.hci import (
+                Address,
                 HCI_LE_Set_Advertising_Parameters_Command,
                 HCI_LE_Set_Advertising_Data_Command,
                 HCI_LE_Set_Advertising_Enable_Command,
@@ -168,10 +169,12 @@ class MeshManager:
                 HCI_LE_Set_Advertising_Parameters_Command(
                     advertising_interval_min=0x0020,
                     advertising_interval_max=0x0020,
-                    advertising_type=0x03,  # ADV_NONCONN_IND
+                    advertising_type=HCI_LE_Set_Advertising_Parameters_Command.AdvertisingType.ADV_NONCONN_IND,
                     own_address_type=own_addr_type,
-                    channel_map=7,
-                    filter_policy=0
+                    peer_address_type=0,
+                    peer_address=Address.ANY,
+                    advertising_channel_map=7,
+                    advertising_filter_policy=0
                 )
             )
             
