@@ -1,16 +1,16 @@
 import logging
-from .crypto import aes_ccm_decrypt, aes_ccm_encrypt, k2
+from .crypto import aes_ccm_decrypt, aes_ccm_encrypt
 
 logger = logging.getLogger(__name__)
 
 
 def calc_aid(app_key: bytes) -> int:
     """Calculate the Application Key Identifier (AID) from an AppKey.
-    The AID is the least significant 6 bits of k2(AppKey, '00')[0].
-    Per Mesh Profile Spec v1.0.1 Section 4.2.6.
+    Per Mesh Profile Spec v1.0.1 Section 4.2.7:
+    AID = k4(AppKey) = AES-CMAC(AES-CMAC(s1("smk4"), AppKey), "id6" || 0x01)[15] & 0x3F
     """
-    aid, _, _ = k2(app_key, b'\x00')
-    return aid & 0x3F
+    from .crypto import k4
+    return k4(app_key)
 
 class UpperTransportLayer:
     """

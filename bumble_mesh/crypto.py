@@ -1,71 +1,22 @@
 from typing import Tuple
 import logging
-from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-from cryptography.hazmat.backends import default_backend
+from bumble.crypto import aes_cmac as bumble_aes_cmac
 from cryptography.hazmat.primitives.ciphers.aead import AESCCM
 
 logger = logging.getLogger(__name__)
 ZERO = b'\x00' * 16
 
 
-def _xor_block(a: bytes, b: bytes) -> bytes:
-    return bytes(x ^ y for x, y in zip(a, b))
-
-
-def _aes_ecb_encrypt(key: bytes, data: bytes) -> bytes:
-    """Single-block AES ECB encryption."""
-    cipher = Cipher(algorithms.AES(key), modes.ECB(), backend=default_backend())
-    encryptor = cipher.encryptor()
-    return encryptor.update(data) + encryptor.finalize()
-
 
 def aes_cmac(key: bytes, msg: bytes) -> bytes:
     """
-    Standard AES-CMAC as defined in NIST SP 800-38B and RFC 4493.
-    Parameters: (Key, Message)
+    Standard AES-CMAC.
+    Order: (Key, Message)
+    Note: Bumble uses (Message, Key), we wrap it.
     """
     if len(key) != 16:
         raise ValueError(f"AES-CMAC requires 16-byte key, got {len(key)}")
-
-    # Step 1: Generate subkeys
-    zero = b'\x00' * 16
-    l = _aes_ecb_encrypt(key, zero)
-
-    # Subkey 1: dbl(L)
-    k1 = bytes([(l[0] << 1) & 0xFF])
-    for i in range(1, 16):
-        k1 += bytes([((l[i] << 1) & 0xFF) | ((l[i-1] >> 7) & 1)])
-    if l[0] & 0x80:
-        k1 = _xor_block(k1, b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x87')
-
-    # Subkey 2: dbl(k1)
-    k2 = bytes([(k1[0] << 1) & 0xFF])
-    for i in range(1, 16):
-        k2 += bytes([((k1[i] << 1) & 0xFF) | ((k1[i-1] >> 7) & 1)])
-    if k1[0] & 0x80:
-        k2 = _xor_block(k2, b'\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x87')
-
-    # Step 2: Process blocks
-    if len(msg) == 0:
-        n = 1
-        last_block = b'\x80' + b'\x00' * 15
-        last_block = _xor_block(last_block, k2)
-    elif len(msg) % 16 == 0:
-        n = len(msg) // 16
-        last_block = _xor_block(msg[-16:], k1)
-    else:
-        n = len(msg) // 16 + 1
-        padded = msg + b'\x80' + b'\x00' * (16 - (len(msg) % 16) - 1)
-        last_block = _xor_block(padded[-16:], k2)
-
-    # CBC-MAC
-    x = b'\x00' * 16
-    for i in range(n - 1):
-        block = msg[i*16:(i+1)*16]
-        x = _aes_ecb_encrypt(key, _xor_block(x, block))
-
-    x = _aes_ecb_encrypt(key, _xor_block(x, last_block))
-    return x
+    return bumble_aes_cmac(msg, key)
 
 def s1(m: bytes) -> bytes:
     """salt = AES-CMAC(ZERO, M)"""
@@ -118,6 +69,19 @@ def crc8(data: bytes) -> int:
     for byte in data:
         fcs = CRC_TABLE[fcs ^ byte]
     return (0xFF - fcs) & 0xFF
+
+
+def k4(app_key: bytes) -> int:
+    """Compute 6-bit Application Key Identifier (AID).
+    Per Mesh Profile Spec v1.0.1 Section 4.2.7 (k4 function).
+    Used by BlueZ mesh_crypto_k4 in mesh/crypto.c.
+    Returns: 6-bit AID value (0-63)
+    """
+    salt = aes_cmac(b'\x00' * 16, b'smk4')
+    t = aes_cmac(salt, app_key)
+    id6 = b'id6' + b'\x01'
+    result = aes_cmac(t, id6)
+    return result[15] & 0x3F
 
 res = crc8(b'\x00\x00')
 print(f"BlueZ FCS Engine: 00 00 -> {res:02x}")
