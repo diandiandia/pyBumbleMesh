@@ -231,8 +231,16 @@ class MeshStack:
         if not result:
             return
         
-        src, dst, seq, transport_pdu_raw = result
+        src, dst, seq, transport_pdu_raw, ctl = result
         # Note: network.py already prints "RX 网络层 解密成功"
+
+        if ctl == 1:
+            # Control Message (e.g. Segment ACK)
+            # Currently we just log it to ensure SAR state is visible
+            opcode = transport_pdu_raw[0] & 0x7F
+            if opcode == 0x00:
+                logger.debug(f" [RX 传输层] 收到分段确认 (Segment ACK) 来自 0x{src:04x}")
+            return
 
         res = self.transport.assemble_pdu(src, transport_pdu_raw, seq=seq)
         if not res: return

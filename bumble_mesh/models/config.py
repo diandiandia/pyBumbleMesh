@@ -131,8 +131,14 @@ class ConfigClient(Model):
 
     def appkey_add(self, net_key_index: int, app_key_index: int, app_key: bytes):
         # Opcode 0x00
-        indices = (net_key_index & 0xFFF) | ((app_key_index & 0xFFF) << 12)
-        payload = indices.to_bytes(3, 'little') + app_key
+        # Mesh Spec 4.3.1.1: NetKeyIndex(12b), AppKeyIndex(12b) packed into 3 octets
+        # Octet 0: NetKeyIndex[0:8]
+        # Octet 1: NetKeyIndex[8:12] (low 4) | AppKeyIndex[0:4] (high 4)
+        # Octet 2: AppKeyIndex[4:12]
+        b0 = net_key_index & 0xFF
+        b1 = ((net_key_index >> 8) & 0x0F) | ((app_key_index << 4) & 0xF0)
+        b2 = (app_key_index >> 4) & 0xFF
+        payload = bytes([b0, b1, b2]) + app_key
         return 0x00, payload
 
     def model_app_bind(self, element_addr: int, app_key_index: int, model_id: int):
