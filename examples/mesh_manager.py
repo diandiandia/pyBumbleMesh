@@ -5,11 +5,12 @@ from typing import Dict, List
 from bumble.device import Device
 from bumble.transport import open_transport
 from bumble_mesh.stack import MeshStack
+from bumble_mesh.logger import setup_logging
 
-# 屏蔽繁杂的日志，只保留关键信息
-logging.basicConfig(level=logging.ERROR)
+# 初始化全局日志配置
+setup_logging()
+
 logger = logging.getLogger('mesh_manager')
-logger.setLevel(logging.INFO)
 
 class MeshManager:
     def __init__(self, stack: MeshStack):
