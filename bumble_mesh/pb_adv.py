@@ -49,6 +49,13 @@ class PBAdvLink:
         self.is_opened = True
         logger.info("PB-ADV Link Opened.")
 
+    async def close(self, reason: int = 0x00):
+        """Sends a Link Close message to the device."""
+        pdu = self.link_id.to_bytes(4, 'big') + bytes([self.local_trans_num, (0x02 << 2) | 0x03, reason])
+        await self._send_wrapper(pdu)
+        self.is_opened = False
+        logger.info(f"PB-ADV Link Closed (Reason: {reason:02x}).")
+
     def handle_pdu(self, pdu: bytes):
         if len(pdu) < 5: return
         link_id = int.from_bytes(pdu[0:4], 'big')

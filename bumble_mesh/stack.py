@@ -170,13 +170,17 @@ class MeshStack:
                         self.storage.save_node(next_addr, uuid, session.shared_secret)
                         self.upper_transport.add_dev_key(next_addr, session.shared_secret)
                         
-                        # --- START AUTOMATIC CONFIGURATION WITH SAFETY DELAY ---
-                        async def delayed_config():
-                            logger.info(f"Waiting 5 seconds for node {next_addr:04x} to initialize...")
-                            await asyncio.sleep(5.0)
+                        # --- START AUTOMATIC CONFIGURATION WITH SAFETY HANDSHAKE ---
+                        async def finalize_and_configure():
+                            # 1. 显式关闭 PB-ADV 链路 (让 BlueZ 完成身份切换)
+                            await pb_link.close()
+                            # 2. 给予充足的初始化时间 (2秒)
+                            logger.info(f"Waiting 2 seconds for node {next_addr:04x} to finalize initialization...")
+                            await asyncio.sleep(2.0)
+                            # 3. 启动配置流
                             await self.config_manager.configure_node(next_addr, 0, b'\x02'*16)
                         
-                        asyncio.create_task(delayed_config())
+                        asyncio.create_task(finalize_and_configure())
                         break
                 except Exception as e: logger.error(f"Worker Error: {e}")
                 finally: pdu_queue.task_done()
