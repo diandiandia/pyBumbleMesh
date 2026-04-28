@@ -69,7 +69,7 @@ class MeshConfigManager:
         logger.info("[3/3] Binding discovered SIG models to AppKey...")
         models = self.stack.storage.get_node_models(node_addr)
         for m in models:
-            if m['model_id'] in (0x0000, 0x0001, 0x0002): continue # Skip mandatory config models
+            if m['model_id'] in (0x0000, 0x0001, 0x0002, 0x0003): continue # Skip foundation models
             
             logger.info(f"Binding Model {m['model_id']:04x} on Element {m['elem_addr']:04x}...")
             opcode, payload = self.config_client.model_app_bind(m['elem_addr'], app_key_index, m['model_id'])

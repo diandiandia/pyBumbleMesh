@@ -5,10 +5,10 @@ logger = logging.getLogger(__name__)
 
 class RemoteProvisioningClient(Model):
     """
-    Remote Provisioning Client Model (Model ID: 0x0004)
+    Remote Provisioning Client Model (Model ID: 0x0005)
     Used to provision devices through a remote node.
     """
-    MODEL_ID = 0x0004
+    MODEL_ID = 0x0005
     
     def __init__(self):
         super().__init__(self.MODEL_ID)
