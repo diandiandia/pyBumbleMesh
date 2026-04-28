@@ -28,12 +28,15 @@ class NetworkLayer:
         # Mesh Profile Spec v1.0.1 Section 3.8.4.2: Network Nonce type = 0x00
         nonce = bytes([0x00, ctl_ttl]) + seq_bytes + src_bytes + b'\x00\x00' + self.iv_index.to_bytes(4, 'big')
         
+        # Encrypt DST + TransportPDU together (matching BlueZ behavior)
+        # BlueZ encrypts packet[7:] = DST(2) + TransportPDU(N)
+        plaintext = dst_bytes + transport_pdu
         mic_len = 8 if ctl else 4
-        encrypted_payload = aes_ccm_encrypt(self.encryption_key, nonce, transport_pdu, b'', mic_len)
-        
+        encrypted_payload = aes_ccm_encrypt(self.encryption_key, nonce, plaintext, b'', mic_len)
+
         # Obfuscation (Mesh Spec v1.0.1 Section 3.8.4.3)
-        # Privacy Random = DST || Encrypted Payload[0:5]
-        privacy_random = dst_bytes + encrypted_payload[:5]
+        # Privacy Random = encrypted_payload[0:7] (first 7 bytes of encrypted data)
+        privacy_random = encrypted_payload[:7]
         iv_index_bytes = self.iv_index.to_bytes(4, 'big')
         
         cipher = Cipher(algorithms.AES(self.privacy_key), modes.ECB(), backend=default_backend())
@@ -44,22 +47,21 @@ class NetworkLayer:
         # Obfuscate CTL_TTL (1) + SEQ (3) + SRC (2) = 6 bytes
         obfuscated = bytes([a ^ b for a, b in zip(header[1:7], pecb[:6])])
         
-        pdu = bytes([header[0]]) + obfuscated + header[7:9] + encrypted_payload
+        pdu = bytes([header[0]]) + obfuscated + encrypted_payload
         logger.debug(f"[TX 网络层] SRC=0x{src:04x} DST=0x{dst:04x} SEQ={self.seq} CTL={ctl} PDU={pdu.hex()}")
         self.seq += 1
         return pdu
 
     def decrypt_pdu(self, pdu: bytes) -> Optional[tuple]:
         if len(pdu) < 14: return None
-        
+
         ivi_nid = pdu[0]
         if (ivi_nid & 0x7F) != self.nid: return None
-        
-        # De-obfuscate
-        dst_bytes = pdu[7:9]
-        encrypted_payload = pdu[9:]
-        # Privacy Random for decryption is also DST || EncryptedPayload[:5]
-        privacy_random = dst_bytes + encrypted_payload[:5]
+
+        # De-obfuscate: encrypted payload starts at pdu[7] (DST is encrypted)
+        encrypted_payload = pdu[7:]
+        # Privacy Random = first 7 bytes of encrypted data
+        privacy_random = encrypted_payload[:7]
         
         cipher = Cipher(algorithms.AES(self.privacy_key), modes.ECB(), backend=default_backend())
         encryptor = cipher.encryptor()
@@ -73,14 +75,16 @@ class NetworkLayer:
         src_bytes = deobfuscated[4:6]
         
         src = int.from_bytes(src_bytes, 'big')
-        dst = int.from_bytes(dst_bytes, 'big')
         seq = int.from_bytes(seq_bytes, 'big')
         
         nonce = bytes([0x00, ctl_ttl]) + seq_bytes + src_bytes + b'\x00\x00' + self.iv_index.to_bytes(4, 'big')
         
         mic_len = 8 if ctl else 4
         try:
-            transport_pdu = aes_ccm_decrypt(self.encryption_key, nonce, encrypted_payload, b'', mic_len)
+            # DST is encrypted together with TransportPDU (matching BlueZ)
+            decrypted = aes_ccm_decrypt(self.encryption_key, nonce, encrypted_payload, b'', mic_len)
+            dst = int.from_bytes(decrypted[0:2], 'big')
+            transport_pdu = decrypted[2:]
             logger.debug(f"[RX 网络层] 解密成功: 来自=0x{src:04x} 目标=0x{dst:04x} SEQ={seq} CTL={ctl} PDU={pdu.hex()}")
             return src, dst, seq, transport_pdu, ctl
         except Exception:
