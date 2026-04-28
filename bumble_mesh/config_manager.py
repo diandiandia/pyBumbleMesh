@@ -42,6 +42,7 @@ class MeshConfigManager:
 
         for attempt in range(1, 4):
             logger.info(f"  Attempt {attempt}/3: Sending Composition Data Get...")
+            comp_event.clear()
             await self.stack.send_model_message(node_addr, self.config_client, opcode, payload)
             try:
                 await asyncio.wait_for(comp_event.wait(), timeout=5.0)
@@ -53,7 +54,7 @@ class MeshConfigManager:
                     return False
                 logger.warning(f"  Attempt {attempt} timed out. Retrying...")
 
-        # 2. AppKey Add
+        # 2. AppKey Add (with retry)
         logger.info("[2/3] Adding AppKey...")
         ack_event = asyncio.Event()
         
@@ -65,10 +66,19 @@ class MeshConfigManager:
         
         self.config_client.on_appkey_status = on_ack_status
         opcode, payload = self.config_client.appkey_add(0, app_key_index, app_key)
-        await self.stack.send_model_message(node_addr, self.config_client, opcode, payload)
         
-        try: await asyncio.wait_for(ack_event.wait(), timeout=5.0)
-        except asyncio.TimeoutError: logger.warning("AppKey Add status timeout (continuing anyway)")
+        for attempt in range(1, 4):
+            logger.info(f"  AppKey Add Attempt {attempt}/3...")
+            ack_event.clear()
+            await self.stack.send_model_message(node_addr, self.config_client, opcode, payload)
+            try:
+                await asyncio.wait_for(ack_event.wait(), timeout=5.0)
+                break
+            except asyncio.TimeoutError:
+                if attempt == 3:
+                    logger.warning("AppKey Add final timeout (continuing anyway)")
+                else:
+                    logger.warning(f"  AppKey Add Attempt {attempt} timed out. Retrying...")
 
         # 3. Model App Bind (Bind all discovered SIG models)
         logger.info("[3/3] Binding discovered SIG models to AppKey...")
