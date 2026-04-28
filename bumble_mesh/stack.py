@@ -262,9 +262,7 @@ class MeshStack:
         
         # Decrypt based on AKF bit from the PDU
         # Config messages (akf_or_ctl=0) use DevKey, others use AppKey
-        # Extract the 6-bit AID from transport_pdu_raw[0] for learning peer's aid
-        peer_aid = transport_pdu_raw[0] & 0x3F if akf_or_ctl == 1 else 0
-        access_pdu = self.upper_transport.decrypt(src, dst, seq_auth, self.network.iv_index, full_pdu, akf=akf_or_ctl, aid=peer_aid, aszmic=aszmic)
+        access_pdu = self.upper_transport.decrypt(src, dst, seq_auth, self.network.iv_index, full_pdu, akf=akf_or_ctl, aid=0, aszmic=aszmic)
         if access_pdu:
             print(f" [RX 应用层] 业务数据解密成功: {access_pdu.hex()}")
             self.access.handle_pdu(src, dst, 0, access_pdu)
@@ -286,9 +284,8 @@ class MeshStack:
         else:
             key = app_key or b'\x00'*16
             if app_key:
-                # Use learned AID from peer, default to 0
                 from .upper_transport import calc_aid
-                aid = self.upper_transport.app_key_aids.get(0, calc_aid(app_key))
+                aid = calc_aid(app_key)
                 akf = 1
             else:
                 akf, aid = 0, 0

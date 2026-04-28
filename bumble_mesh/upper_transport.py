@@ -20,7 +20,6 @@ class UpperTransportLayer:
     def __init__(self):
         self.app_keys: dict[int, bytes] = {} # index -> key
         self.dev_keys: dict[int, bytes] = {} # address -> key
-        self.app_key_aids: dict[int, int] = {} # index -> aid (learned from peer)
 
     def add_app_key(self, index: int, key: bytes):
         self.app_keys[index] = key
@@ -87,15 +86,7 @@ class UpperTransportLayer:
             return None
 
         try:
-            result = aes_ccm_decrypt(key, nonce, transport_pdu, b'', mic_len)
-            # Learn AID from the first AppKey that matches
-            if akf == 1 and key is not None:
-                for idx, k in self.app_keys.items():
-                    if k == key:
-                        peer_aid = aid & 0x3F  # Extract AID from the 7-bit key_aid
-                        self.app_key_aids[idx] = peer_aid
-                        break
-            return result
+            return aes_ccm_decrypt(key, nonce, transport_pdu, b'', mic_len)
         except Exception as e:
             logger.debug(f"Upper Transport Decryption Failed: {e}")
             return None
