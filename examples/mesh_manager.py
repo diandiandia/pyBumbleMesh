@@ -105,39 +105,24 @@ class MeshManager:
                 print("无效选择")
                 
     async def trigger_test_hook(self):
-        """
-        发送一个以 0xff 开头的数据包，触发 BlueZ 的 VULNERABILITY TEST HOOK。
-        """
         if not self.target_addr:
             print("[-] 错误: 请先设置目标地址")
             return
 
-        print(f"[*] 正在尝试向 {self.target_addr:04x} 触发测试钩子...")
+        print(f"[*] 正在触发钩子 (Target: {self.target_addr:04x})...")
 
-        # 构造 Payload：第一个字节必须是 0xff
-        # 注意: access_pdu 必须 ≤ 12 字节，否则加密后的 Network PDU (33+ 字节)
-        # 会超出 BLE 广播数据 31 字节上限，导致 btmon 报 "invalid packet size"
-        access_pdu = b'\xff' + b'A' * 8  # 总共 9 字节，Network PDU = 26 字节，AD = 28 字节 ✅
-
-        # 使用 DevKey 加密，模拟管理指令
-        key = self.stack.upper_transport.get_dev_key(self.target_addr) or b'\x00'*16
-        encrypted_pdu = self.stack.upper_transport.encrypt(
-            self.stack.unicast_address, self.target_addr,
-            self.stack.network.seq, self.stack.network.iv_index,
-            access_pdu, key, akf=0, aid=0
+        # 核心：使用 opcode=0xff。
+        # stack.send_model_message 会自动加上合法的传输层头部
+        # 并且第一个字节会被设为 0xff
+        await self.stack.send_model_message(
+            self.target_addr,
+            self.stack.rp_client,
+            opcode=0xff,
+            payload=b'VULNTEST',
+            app_key=None
         )
-
-        # 必须经过 Lower Transport 层添加传输头 (SEG/AKF/AID 字节)
-        # 否则对方会收到裸密文，把密文第一字节误当成分段头导致 inseg_to() Timeout
-        transport_header = bytes([((0 & 1) << 6) | (0 & 0x3F)])  # SEG=0, AKF=0, AID=0
-        transport_pdu = transport_header + encrypted_pdu
-
-        network_pdu = self.stack.network.encrypt_pdu(
-            self.stack.unicast_address, self.target_addr, transport_pdu
-        )
-
-        await self.stack.bearer.send_pdu(network_pdu, is_pb_adv=False)
-        print("[+] 钩子触发包已发出。请检查 BlueZ 日志是否包含 'TRIGGERING VULNERABILITY TEST HOOK'")       
+        print("[+] 触发包已发出。")
+        
                
     async def send_custom_sar_pdu(self, seg_n: int, seg_o: int, is_malicious: bool = False):                                        
         """                                                                                                                         
