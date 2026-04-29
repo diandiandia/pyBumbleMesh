@@ -63,13 +63,12 @@ class MeshManager:
             print("  11. 手动触发配置 (Manual Re-Config Target)")
             print("  12. 发送自定义 SAR PDU (Custom SAR PDU)")
             print("  13. 发送错误自定义 SAR PDU (Malicious SAR PDU)")
-            print("  14. 触发测试钩子 (Trigger Test Hook)")
             
             print("\n --- 其他 ---")
-            print("  15. 退出 (Quit)")
+            print("  14. 退出 (Quit)")
             print("-" * 45)
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-15]: ")
+            choice = await asyncio.to_thread(input, "请选择操作 [1-14]: ")
             
             if choice == '1':
                 await self.scan_flow()
@@ -98,47 +97,9 @@ class MeshManager:
             elif choice == '13':
                 await self.send_custom_sar_pdu(seg_n=1, seg_o=31, is_malicious=True)
             elif choice == '14':
-                await self.trigger_test_hook()
-            elif choice == '15':
                 break
             else:
                 print("无效选择")
-                
-    async def trigger_test_hook(self):
-        if not self.target_addr:
-            print("[-] 错误: 请先设置目标地址")
-            return
-
-        print(f"[*] 正在尝试触发 BlueZ 漏洞钩子 (Manual Injection Mode)...")
-
-        # 核心：手动构造最原始的 Access PDU
-        # 直接让第一字节是 0xff，后面跟任意内容
-        access_pdu = b'\xff' + b'VULNTEST'
-
-        # 使用 DevKey 加密
-        key = self.stack.upper_transport.get_dev_key(self.target_addr) or b'\x00'*16
-        seq = self.stack.network.seq
-        iv_index = self.stack.network.iv_index
-
-        # 直接调用 upper_transport.encrypt
-        # 注意：akf=0, aid=0 表示使用 DevKey
-        encrypted_pdu = self.stack.upper_transport.encrypt(
-            self.stack.unicast_address, self.target_addr,
-            seq, iv_index, access_pdu, key, akf=0, aid=0
-        )
-
-        # 构造不分段的 Transport Header (SEG=0, AKF=0, AID=0 -> 首字节为 0x00)
-        # 注意：这里传输层首字节必须是 0x00，这样 BlueZ 才会把它当成完整的 Access PDU
-        transport_pdu = b'\x00' + encrypted_pdu
-
-        # 发送网络层加密包
-        network_pdu = self.stack.network.encrypt_pdu(
-            self.stack.unicast_address, self.target_addr, transport_pdu
-        )
-
-        await self.stack.bearer.send_pdu(network_pdu, is_pb_adv=False)
-        self.stack.storage.set_setting("seq", self.stack.network.seq)
-        print("[+] 触发包已发出。请检查 BlueZ 是否打印 'TRIGGERING VULNERABILITY TEST HOOK'")
              
     async def send_custom_sar_pdu(self, seg_n: int, seg_o: int, is_malicious: bool = False):                                        
         """                                                                                                                         
