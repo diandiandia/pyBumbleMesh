@@ -68,7 +68,7 @@ class MeshManager:
             print("  14. 退出 (Quit)")
             print("-" * 45)
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-12]: ")
+            choice = await asyncio.to_thread(input, "请选择操作 [1-14]: ")
             
             if choice == '1':
                 await self.scan_flow()
@@ -145,7 +145,7 @@ class MeshManager:
             self.stack.unicast_address, self.target_addr, transport_pdu                                                             
         )                                                                                                                           
                                                                                                                                     
-        await self.stack.bearer.send_pdu(network_pdu)                                                                               
+        await self.stack.bearer.send_pdu(network_pdu, is_pb_adv=False)                                                                               
         self.stack.storage.set_setting("seq", self.stack.network.seq) # 同步 SEQ 到数据库                                           
         print(f"[+] 报文已发出，SEQ={seq}")    
 
