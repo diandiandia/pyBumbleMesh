@@ -115,7 +115,7 @@ class MeshManager:
         print(f"[*] 正在尝试向 {self.target_addr:04x} 触发测试钩子...")
 
         # 构造 Payload：第一个字节必须是 0xff
-        access_pdu = b'\xff' + b'VULN_TEST_DATA'
+        access_pdu = b'\xff' + b'A' * 15
 
         # 使用 DevKey 加密，模拟管理指令
         key = self.stack.upper_transport.get_dev_key(self.target_addr) or b'\x00'*16
