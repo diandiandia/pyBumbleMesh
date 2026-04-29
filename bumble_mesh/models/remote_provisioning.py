@@ -75,6 +75,12 @@ class RemoteProvisioningClient(Model):
             payload += uuid
         return 0x8052, payload
 
+    def ext_scan_start(self, ad_types: list, timeout: int = 1):
+        """Starts extended remote scan with AD type filtering."""
+        payload = bytes([len(ad_types)]) + bytes(ad_types)
+        payload += bytes([timeout])
+        return 0x8056, payload
+
     def scan_stop(self):
         """Stops remote scanning."""
         return 0x8053, b''
