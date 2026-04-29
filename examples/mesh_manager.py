@@ -122,7 +122,7 @@ class MeshManager:
         encrypted_pdu = self.stack.upper_transport.encrypt(
             self.stack.unicast_address, self.target_addr,
             self.stack.network.seq, self.stack.network.iv_index,
-            malicious_payload, key, akf=0, aid=0
+            access_pdu, key, akf=0, aid=0
         )
 
         network_pdu = self.stack.network.encrypt_pdu(
