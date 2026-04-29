@@ -305,7 +305,7 @@ class MeshManager:
         # 7 个 AD type: sum(len)+7=60 → 精确触发 list[60] 越界
         ad_types = [10, 9, 8, 7, 6, 4, 2]
 
-        opcode, payload = self.stack.rp_client.ext_scan_start(ad_types, timeout=20)
+        opcode, payload = self.stack.rp_client.ext_scan_start(ad_types, timeout=5)
         await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload)
         print(f"[+] EXT_SCAN_START 已发送 (AD types: {ad_types})")
         print("[!] 现在在另一个终端运行:")
