@@ -73,11 +73,11 @@ class RemoteProvisioningClient(Model):
         payload = bytes([limit, timeout])
         if uuid:
             payload += uuid
-        return 0x804F, payload
+        return 0x8052, payload
 
     def scan_stop(self):
         """Stops remote scanning."""
-        return 0x8050, b''
+        return 0x8053, b''
 
     def link_open(self, uuid: bytes):
         """Opens a remote provisioning link to a device UUID."""
