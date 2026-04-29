@@ -51,6 +51,7 @@ class MeshStorage:
     def get_setting(self, key: str, default=None):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
             cursor.execute("SELECT value FROM settings WHERE key=?", (key,))
             row = cursor.fetchone()
             return row[0] if row else default
@@ -58,6 +59,7 @@ class MeshStorage:
     def set_setting(self, key: str, value: str):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
+            cursor.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)")
             cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
             conn.commit()
 

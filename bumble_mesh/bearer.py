@@ -45,7 +45,10 @@ class AdvBearer:
 
     def _on_advertisement(self, advertisement):
         self.pkt_count += 1
-        self._parse_ad_data(bytes(advertisement.data), advertisement.address, advertisement.rssi)
+        try:
+            self._parse_ad_data(bytes(advertisement.data), advertisement.address, advertisement.rssi)
+        except Exception as e:
+            logger.debug(f"Ignored advertisement parse error: {e}")
 
     def _parse_ad_data(self, data: bytes, address, rssi):
         i = 0

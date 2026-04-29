@@ -148,14 +148,12 @@ class MeshManager:
                 print(f" [发现远端设备] UUID: {uid_hex} | RSSI: {rssi}dBm")
 
         self.stack.rp_client.on_scan_report = on_remote_report
-        opcode, payload = self.stack.rp_client.scan_start(timeout=60)
+        opcode, payload = self.stack.rp_client.scan_start(timeout=10)
         await self.stack.send_model_message(self.target_addr, self.stack.rp_client, opcode, payload)
         
-        print("\n[!] 远程扫描将持续 60 秒。在此期间在其他终端运行:")
-        print("[!]   sudo .venv/bin/python -m examples.send_hci_beacon")
-        print("[!] 来发送恶意广播包触发漏洞。")
+        print("\n[!] 远程扫描持续 10 秒...")
         
-        await asyncio.sleep(60.0)
+        await asyncio.sleep(10.0)
         print("\n远程扫描结束。")
 
     async def remote_provision_flow(self):
