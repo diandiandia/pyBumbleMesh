@@ -61,9 +61,11 @@ class MeshManager:
             print("  9. 远程扫描 (通过当前目标节点进行)")
             print("  10. 远程配网 (通过当前目标节点进行)")
             print("  11. 手动触发配置 (Manual Re-Config Target)")
+            print("  12. 发送自定义 SAR PDU (Custom SAR PDU)")
+            print("  13. 发送错误自定义 SAR PDU (Malicious SAR PDU)")
             
             print("\n --- 其他 ---")
-            print("  12. 退出 (Quit)")
+            print("  14. 退出 (Quit)")
             print("-" * 45)
             
             choice = await asyncio.to_thread(input, "请选择操作 [1-12]: ")
@@ -90,11 +92,11 @@ class MeshManager:
                 await self.remote_provision_flow()
             elif choice == '11':
                 await self.manual_config_flow()
-            elif choice == '13':
-                await self.send_custom_sar_pdu(seg_n=1, seg_o=0)
-            elif choice == '14':
-                await self.send_custom_sar_pdu(seg_n=1, seg_o=31, is_malicious=True)
             elif choice == '12':
+                await self.send_custom_sar_pdu(seg_n=1, seg_o=0)
+            elif choice == '13':
+                await self.send_custom_sar_pdu(seg_n=1, seg_o=31, is_malicious=True)
+            elif choice == '14':
                 break
             else:
                 print("无效选择")
