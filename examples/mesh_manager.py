@@ -63,12 +63,13 @@ class MeshManager:
             print("  11. 手动触发配置 (Manual Re-Config Target)")
             print("  12. 发送自定义 SAR PDU (Custom SAR PDU)")
             print("  13. 发送错误自定义 SAR PDU (Malicious SAR PDU)")
+            print("  14. 触发测试钩子 (Trigger Test Hook)")
             
             print("\n --- 其他 ---")
-            print("  14. 退出 (Quit)")
+            print("  15. 退出 (Quit)")
             print("-" * 45)
             
-            choice = await asyncio.to_thread(input, "请选择操作 [1-14]: ")
+            choice = await asyncio.to_thread(input, "请选择操作 [1-15]: ")
             
             if choice == '1':
                 await self.scan_flow()
@@ -97,10 +98,40 @@ class MeshManager:
             elif choice == '13':
                 await self.send_custom_sar_pdu(seg_n=1, seg_o=31, is_malicious=True)
             elif choice == '14':
+                await self.trigger_test_hook()
+            elif choice == '15':
                 break
             else:
                 print("无效选择")
                 
+    async def trigger_test_hook(self):
+        """
+        发送一个以 0xff 开头的数据包，触发 BlueZ 的 VULNERABILITY TEST HOOK。
+        """
+        if not self.target_addr:
+            print("[-] 错误: 请先设置目标地址")
+            return
+
+        print(f"[*] 正在尝试向 {self.target_addr:04x} 触发测试钩子...")
+
+        # 构造 Payload：第一个字节必须是 0xff
+        access_pdu = b'\xff' + b'VULN_TEST_DATA'
+
+        # 使用 DevKey 加密，模拟管理指令
+        key = self.stack.upper_transport.get_dev_key(self.target_addr) or b'\x00'*16
+        encrypted_pdu = self.stack.upper_transport.encrypt(
+            self.stack.unicast_address, self.target_addr,
+            self.stack.network.seq, self.stack.network.iv_index,
+            malicious_payload, key, akf=0, aid=0
+        )
+
+        network_pdu = self.stack.network.encrypt_pdu(
+            self.stack.unicast_address, self.target_addr, encrypted_pdu
+        )
+
+        await self.stack.bearer.send_pdu(network_pdu, is_pb_adv=False)
+        print("[+] 钩子触发包已发出。请检查 BlueZ 日志是否包含 'TRIGGERING VULNERABILITY TEST HOOK'")       
+               
     async def send_custom_sar_pdu(self, seg_n: int, seg_o: int, is_malicious: bool = False):                                        
         """                                                                                                                         
         手动构造并发送一个分段报文。                                                                                                
