@@ -13,12 +13,12 @@ class RemoteProvisioningClient(Model):
     def __init__(self):
         super().__init__(self.MODEL_ID)
         # Register standard v1.1 Opcodes
-        self.register_handler(0x8051, self._handle_scan_status)
-        self.register_handler(0x8052, self._handle_scan_report)
-        self.register_handler(0x8056, self._handle_link_status)
-        self.register_handler(0x8057, self._handle_link_report)
-        self.register_handler(0x8059, self._handle_pdu_outbound_report)
-        self.register_handler(0x805A, self._handle_pdu_report)
+        self.register_handler(0x8054, self._handle_scan_status)
+        self.register_handler(0x8055, self._handle_scan_report)
+        self.register_handler(0x805B, self._handle_link_status)
+        self.register_handler(0x805C, self._handle_link_report)
+        self.register_handler(0x805E, self._handle_pdu_outbound_report)
+        self.register_handler(0x805F, self._handle_pdu_report)
 
         self.on_scan_report = None
         self.on_link_status = None
